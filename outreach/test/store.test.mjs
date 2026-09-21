@@ -529,6 +529,119 @@ test("custom warmup follows its formula and reset keeps earned history", () => {
   s.close();
 });
 
+test("placement observations are idempotent and preserve rescued time", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const m = s.saveMailbox(mailbox);
+  const event = {
+    messageId: "<warmup@example.com>",
+    provider: "google",
+    placement: "spam",
+    folder: "[Gmail]/Spam",
+    observedAt: 1000,
+    rescuedAt: 1100,
+  };
+  s.recordPlacement(m.id, event);
+  s.recordPlacement(m.id, { ...event, observedAt: 1200, rescuedAt: 1300 });
+  const rows = s.db.prepare("SELECT * FROM warmup_placement").all();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].rescued_at, 1100);
+  s.close();
+});
+
+test("placement folder cursors persist independently from inbox sync", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dmailio-placement-"));
+  const path = join(dir, "placement.sqlite");
+  let s;
+  try {
+    s = new module.Store(path, "a".repeat(64));
+    const m = s.saveMailbox(mailbox);
+    s.synced(m.id, { validity: "inbox", uid: 7, caughtUp: true });
+    s.savePlacementCursor(m.id, "INBOX", { validity: "one", uid: 10 });
+    s.savePlacementCursor(m.id, "Junk", { validity: "two", uid: 20 });
+    s.close();
+    s = new module.Store(path, "a".repeat(64));
+    assert.deepEqual(s.placementCursor(m.id, "INBOX"), {
+      validity: "one",
+      uid: 10,
+    });
+    assert.deepEqual(s.placementCursor(m.id, "Junk"), {
+      validity: "two",
+      uid: 20,
+    });
+    assert.equal(s.mailbox(m.id, true).cursor.uid, 7);
+    s.savePlacementCursor(m.id, "Junk", { validity: "changed", uid: 3 });
+    assert.deepEqual(s.placementCursor(m.id, "Junk"), {
+      validity: "changed",
+      uid: 3,
+    });
+  } finally {
+    s?.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("mailbox detail aggregates thirty real days and latest provider placement", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const now = new Date("2026-09-21T12:00:00Z").getTime();
+  const m = s.saveMailbox(mailbox);
+  const sent = s.insertMessage(
+    {
+      mailbox_id: m.id,
+      kind: "warmup",
+      recipient: "peer@example.com",
+      subject: "Тест",
+      body: "Тест",
+    },
+    now - 86400000,
+  );
+  s.finish(sent.id, "sent", now - 86400000 + 1);
+  s.recordPlacement(m.id, {
+    messageId: "<one@example.com>",
+    provider: "google",
+    placement: "inbox",
+    folder: "INBOX",
+    observedAt: now - 86400000,
+  });
+  s.recordPlacement(m.id, {
+    messageId: "<two@example.com>",
+    provider: "google",
+    placement: "spam",
+    folder: "[Gmail]/Spam",
+    observedAt: now - 3600000,
+    rescuedAt: now - 3500000,
+  });
+  s.recordPlacement(m.id, {
+    messageId: "<two@example.com>",
+    provider: "google",
+    placement: "inbox",
+    folder: "INBOX",
+    observedAt: now - 3400000,
+  });
+
+  const detail = s.mailboxDetail(m.id, now);
+  assert.equal(detail.activity.length, 30);
+  assert.equal(detail.summary.sent, 1);
+  assert.equal(detail.summary.rescued, 1);
+  assert.equal(detail.activity.at(-1).spam, 1);
+  assert.equal(detail.activity.at(-1).rescued, 1);
+  assert.deepEqual(detail.providers, [
+    {
+      provider: "google",
+      inbox: 2,
+      spam: 0,
+      promotions: 0,
+      unknown: 0,
+      rescued: 1,
+      total: 2,
+    },
+  ]);
+  assert.equal(
+    detail.activity.reduce((sum, day) => sum + day.inbox, 0),
+    2,
+  );
+  s.close();
+});
+
 test("waiting for a healthy peer does not advance the automatic plan", () => {
   const s = new module.Store(":memory:", "a".repeat(64));
   const started = new Date("2026-09-01T00:00:00Z").getTime();

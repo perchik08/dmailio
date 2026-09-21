@@ -57,6 +57,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,message_id TEXT NOT NULL REFERENCES messages(id),kind TEXT NOT NULL,created INTEGER NOT NULL, UNIQUE(message_id,kind));
       CREATE TABLE IF NOT EXISTS runtime_lock(id INTEGER PRIMARY KEY,owner TEXT,expires INTEGER);
       CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY,mime TEXT NOT NULL,data BLOB NOT NULL,created INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS warmup_placement(id TEXT PRIMARY KEY,mailbox_id TEXT NOT NULL REFERENCES mailboxes(id),message_id TEXT NOT NULL,provider TEXT NOT NULL,placement TEXT NOT NULL,folder TEXT NOT NULL,observed_at INTEGER NOT NULL,rescued_at INTEGER NOT NULL DEFAULT 0,UNIQUE(mailbox_id,message_id,placement));
+      CREATE TABLE IF NOT EXISTS warmup_folder_cursor(mailbox_id TEXT NOT NULL REFERENCES mailboxes(id),folder TEXT NOT NULL,validity TEXT NOT NULL,uid INTEGER NOT NULL,PRIMARY KEY(mailbox_id,folder));
     `);
     // Additive migration: existing messages remain plain text without a signature.
     const columns = new Set(
@@ -295,6 +297,168 @@ export class Store {
         "UPDATE mailboxes SET error='Не удалось синхронизировать входящие. Проверьте подключение.' WHERE id=?",
       )
       .run(id);
+  }
+  placementCursor(mailboxId, folder) {
+    const row = this.db
+      .prepare(
+        "SELECT validity,uid FROM warmup_folder_cursor WHERE mailbox_id=? AND folder=?",
+      )
+      .get(mailboxId, String(folder));
+    return row
+      ? { validity: row.validity, uid: row.uid }
+      : { validity: "", uid: 0 };
+  }
+  savePlacementCursor(mailboxId, folder, cursor) {
+    this.mailbox(mailboxId);
+    const validity = String(cursor?.validity || "");
+    const uid = Math.max(0, Number(cursor?.uid) || 0);
+    requireValue(validity && Number.isInteger(uid), "Некорректный IMAP-курсор");
+    this.db
+      .prepare(
+        `INSERT INTO warmup_folder_cursor(mailbox_id,folder,validity,uid) VALUES(?,?,?,?)
+         ON CONFLICT(mailbox_id,folder) DO UPDATE SET validity=excluded.validity,uid=excluded.uid`,
+      )
+      .run(mailboxId, String(folder).slice(0, 500), validity, uid);
+    return { validity, uid };
+  }
+  pendingPlacementMessageIds(mailboxId) {
+    const mailbox = this.mailbox(mailboxId);
+    return new Set(
+      this.db
+        .prepare(
+          "SELECT message_id FROM messages WHERE kind='warmup' AND direction='out' AND status='sent' AND recipient=?",
+        )
+        .all(mailbox.email)
+        .map((row) => row.message_id),
+    );
+  }
+  recordPlacement(mailboxId, input) {
+    this.mailbox(mailboxId);
+    const placements = ["inbox", "spam", "promotions", "unknown"];
+    const providers = ["google", "yandex", "mailru", "other"];
+    const messageId = String(input.messageId || "").slice(0, 998);
+    const placement = String(input.placement || "");
+    const provider = String(input.provider || "");
+    const observedAt = Number(input.observedAt) || Date.now();
+    const rescuedAt = Number(input.rescuedAt) || 0;
+    requireValue(messageId, "Не указан Message-ID прогрева");
+    requireValue(
+      placements.includes(placement),
+      "Неизвестное размещение письма",
+    );
+    requireValue(providers.includes(provider), "Неизвестный почтовый сервис");
+    this.db
+      .prepare(
+        `INSERT INTO warmup_placement(id,mailbox_id,message_id,provider,placement,folder,observed_at,rescued_at)
+         VALUES(?,?,?,?,?,?,?,?)
+         ON CONFLICT(mailbox_id,message_id,placement) DO UPDATE SET
+           rescued_at=CASE WHEN warmup_placement.rescued_at=0 THEN excluded.rescued_at ELSE warmup_placement.rescued_at END`,
+      )
+      .run(
+        randomUUID(),
+        mailboxId,
+        messageId,
+        provider,
+        placement,
+        String(input.folder || "").slice(0, 500),
+        observedAt,
+        rescuedAt,
+      );
+    return this.db
+      .prepare(
+        "SELECT * FROM warmup_placement WHERE mailbox_id=? AND message_id=? AND placement=?",
+      )
+      .get(mailboxId, messageId, placement);
+  }
+  mailboxDetail(id, now = Date.now()) {
+    const mailbox = this.mailboxOverview(now).find((row) => row.id === id);
+    requireValue(mailbox, "Ящик не найден");
+    const start = new Date(now);
+    const today = Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth(),
+      start.getUTCDate(),
+    );
+    const since = today - 29 * 86400000;
+    const days = new Map();
+    for (let index = 0; index < 30; index++) {
+      const time = since + index * 86400000;
+      const date = new Date(time).toISOString().slice(0, 10);
+      days.set(date, {
+        date,
+        sent: 0,
+        replies: 0,
+        inbox: 0,
+        spam: 0,
+        promotions: 0,
+        unknown: 0,
+        rescued: 0,
+      });
+    }
+    const messageRows = this.db
+      .prepare(
+        `SELECT direction,status,parent,created FROM messages
+         WHERE mailbox_id=? AND kind='warmup' AND created>=?`,
+      )
+      .all(id, since);
+    for (const row of messageRows) {
+      const day = days.get(new Date(row.created).toISOString().slice(0, 10));
+      if (!day) continue;
+      if (row.direction === "out" && row.status === "sent") day.sent++;
+      if (row.direction === "in" && row.parent) day.replies++;
+    }
+    const placementRows = this.db
+      .prepare(
+        "SELECT * FROM warmup_placement WHERE mailbox_id=? AND observed_at>=? ORDER BY observed_at",
+      )
+      .all(id, since);
+    for (const row of placementRows) {
+      const day = days.get(
+        new Date(row.observed_at).toISOString().slice(0, 10),
+      );
+      if (day) day[row.placement]++;
+      if (row.rescued_at) {
+        const rescued = days.get(
+          new Date(row.rescued_at).toISOString().slice(0, 10),
+        );
+        if (rescued) rescued.rescued++;
+      }
+    }
+    const latest = new Map();
+    for (const row of placementRows) {
+      const previous = latest.get(row.message_id);
+      if (!previous || previous.observed_at < row.observed_at)
+        latest.set(row.message_id, row);
+    }
+    const providerMap = new Map();
+    for (const row of latest.values()) {
+      const value = providerMap.get(row.provider) || {
+        provider: row.provider,
+        inbox: 0,
+        spam: 0,
+        promotions: 0,
+        unknown: 0,
+        rescued: 0,
+        total: 0,
+      };
+      value[row.placement]++;
+      value.total++;
+      providerMap.set(row.provider, value);
+    }
+    for (const row of placementRows)
+      if (row.rescued_at) providerMap.get(row.provider).rescued++;
+    return {
+      mailbox,
+      summary: {
+        sent: mailbox.warmupStats.sent,
+        replies: mailbox.warmupStats.replies,
+        rescued: placementRows.filter((row) => row.rescued_at).length,
+      },
+      activity: [...days.values()],
+      providers: [...providerMap.values()].sort((a, b) =>
+        a.provider.localeCompare(b.provider),
+      ),
+    };
   }
   saveCampaign(input) {
     const id = input.id || randomUUID();
