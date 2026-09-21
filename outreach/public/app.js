@@ -686,7 +686,8 @@ function renderMailboxStats(detail) {
       const height = Math.max(2, Math.round((total / maxActivity) * 150));
       const inbox = total ? Math.round((day.inbox / total) * 100) : 0;
       const promotions = total ? Math.round((day.promotions / total) * 100) : 0;
-      return `<div class="activity-day" title="${escape(day.date)} · входящие ${day.inbox}, промоакции ${day.promotions}, спам ${day.spam}"><div class="activity-bar ${total ? "" : "empty-bar"}" style="height:${height}px"><span class="bar-inbox" style="height:${inbox}%"></span><span class="bar-promotions" style="height:${promotions}%"></span><span class="bar-spam" style="height:${Math.max(0, 100 - inbox - promotions)}%"></span></div>${index % 5 === 0 || index === 29 ? `<small>${new Date(day.date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</small>` : "<small></small>"}</div>`;
+      const spam = total ? Math.max(0, 100 - inbox - promotions) : 0;
+      return `<div class="activity-day" title="${escape(day.date)} · входящие ${day.inbox}, промоакции ${day.promotions}, спам ${day.spam}"><div class="activity-bar ${total ? "" : "empty-bar"}" style="height:${height}px"><span class="bar-inbox" style="height:${inbox}%"></span><span class="bar-promotions" style="height:${promotions}%"></span><span class="bar-spam" style="height:${spam}%"></span></div>${index % 5 === 0 || index === 29 ? `<small>${new Date(day.date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</small>` : "<small></small>"}</div>`;
     })
     .join(
       "",

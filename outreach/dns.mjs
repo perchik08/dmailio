@@ -19,6 +19,12 @@ const status = (values, extra = {}) => ({
   error: "",
   ...extra,
 });
+const invalid = (values, extra = {}) => ({
+  status: "invalid",
+  values: bounded(values),
+  error: "Запись найдена, но не может использоваться для почты",
+  ...extra,
+});
 const failure = (error, extra = {}) => ({
   status: missingCodes.has(error?.code) ? "missing" : "unavailable",
   values: [],
@@ -58,11 +64,13 @@ export async function checkDomainDNS(address, options = {}) {
   const mxPromise = (async () => {
     try {
       const rows = await resolver.resolveMx(domain);
-      return status(
-        rows
-          .sort((a, b) => a.priority - b.priority)
-          .map((row) => `${row.priority} ${row.exchange}`),
+      const ordered = rows.sort((a, b) => a.priority - b.priority);
+      const values = ordered.map(
+        (row) => `${row.priority} ${row.exchange || "."}`,
       );
+      return ordered.length && ordered.every((row) => !row.exchange)
+        ? invalid(values)
+        : status(values);
     } catch (error) {
       return failure(error);
     }
@@ -71,15 +79,23 @@ export async function checkDomainDNS(address, options = {}) {
   const dmarcPromise = txt(resolver, `_dmarc.${domain}`, "v=dmarc1");
   const dkimPromise = (async () => {
     let unavailable = false;
+    let invalidResult = null;
     for (const selector of selectors) {
       const result = await txt(
         resolver,
         `${selector}._domainkey.${domain}`,
         "v=dkim1",
       );
-      if (result.status === "ok") return { ...result, selector };
+      if (result.status === "ok") {
+        const usable = result.values.some((value) =>
+          /(?:^|;)\s*p\s*=\s*[^;\s]+/i.test(value),
+        );
+        if (usable) return { ...result, selector };
+        invalidResult ||= invalid(result.values, { selector });
+      }
       unavailable ||= result.status === "unavailable";
     }
+    if (invalidResult) return invalidResult;
     return {
       status: unavailable ? "unavailable" : "missing",
       values: [],

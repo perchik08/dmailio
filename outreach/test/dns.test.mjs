@@ -56,3 +56,23 @@ test("DNS diagnostics reject non-email input and bound rendered records", async 
   assert.ok(result.mx.values.length <= 20);
   assert.ok(result.mx.values.join("").length <= 4000);
 });
+
+test("DNS diagnostics do not report null MX or revoked DKIM as healthy", async () => {
+  const resolver = {
+    resolveMx: async () => [{ priority: 0, exchange: "" }],
+    resolveTxt: async (name) =>
+      name === "example.com"
+        ? [["v=spf1 -all"]]
+        : name === "_dmarc.example.com"
+          ? [["v=DMARC1; p=reject"]]
+          : [["v=DKIM1; p="]],
+  };
+  const result = await checkDomainDNS("sender@example.com", {
+    resolver,
+    selectors: ["default"],
+  });
+  assert.equal(result.mx.status, "invalid");
+  assert.equal(result.dkim.status, "invalid");
+  assert.equal(result.spf.status, "ok");
+  assert.equal(result.dmarc.status, "ok");
+});
