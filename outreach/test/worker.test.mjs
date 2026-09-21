@@ -72,6 +72,36 @@ test("worker records transport failures as uncertain rather than retrying", asyn
   assert.equal(s.campaign(c.id).leads[0].status, "uncertain");
   s.close();
 });
+test("placement inspection failure does not block campaign delivery", async () => {
+  const { s, m, c } = setup();
+  const delivered = [];
+  let inspected = 0;
+  const now = new Date("2026-09-21T12:00:00Z").getTime();
+  const warmup = s.insertMessage(
+    {
+      mailbox_id: m.id,
+      kind: "warmup",
+      recipient: m.email,
+      subject: "Placement",
+      body: "Placement",
+    },
+    now - 120000,
+  );
+  s.finish(warmup.id, "sent", now - 119999);
+  const w = new module.Worker(s, {
+    sync: async () => ({ validity: "1", uid: 0, caughtUp: true }),
+    inspectWarmupPlacement: async () => {
+      inspected++;
+      throw new Error("unsupported folder");
+    },
+    send: async (m, msg) => delivered.push(msg),
+  });
+  await w.tick(now);
+  assert.equal(inspected, 1);
+  assert.equal(delivered.length, 1);
+  assert.equal(s.campaign(c.id).status, "completed");
+  s.close();
+});
 test("warmup requires opted-in peers and never appears in campaign analytics", () => {
   const { s, m } = setup();
   s.setCampaignStatus(s.campaigns()[0].id, "paused");

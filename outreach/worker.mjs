@@ -54,6 +54,20 @@ export class Worker {
             (incoming) => this.store.ingest(m.id, incoming),
           );
           this.store.synced(m.id, cursor);
+          try {
+            const known = this.store.pendingPlacementMessageIds(m.id);
+            if (known.size && this.gateway.inspectWarmupPlacement)
+              await this.gateway.inspectWarmupPlacement(
+                this.store.mailbox(m.id, true),
+                known,
+                (event) => this.store.recordPlacement(m.id, event),
+                (folder) => this.store.placementCursor(m.id, folder),
+                (folder, next) =>
+                  this.store.savePlacementCursor(m.id, folder, next),
+              );
+          } catch {
+            // Placement diagnostics must never block inbox sync or delivery.
+          }
           if (cursor.caughtUp !== false) healthy.add(m.id);
         } catch {
           this.store.syncError(m.id);

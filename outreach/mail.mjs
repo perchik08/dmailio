@@ -221,4 +221,102 @@ export class MailGateway {
       c.close();
     }
   }
+
+  async inspectWarmupPlacement(
+    m,
+    knownMessageIds,
+    onPlacement,
+    cursorFor = async () => null,
+    onCursor = async () => {},
+  ) {
+    if (!knownMessageIds?.size) return;
+    const host = String(m.imap?.host || "").toLowerCase();
+    const provider =
+      host.includes("gmail") || host.includes("google")
+        ? "google"
+        : host.includes("yandex")
+          ? "yandex"
+          : host.includes("mail.ru") || host.includes("vk")
+            ? "mailru"
+            : "other";
+    const c = this.imap(m);
+    try {
+      await c.connect();
+      const folders = (await c.list()).filter((folder) => {
+        const name = String(folder.path || folder.name || "").toLowerCase();
+        return (
+          folder.specialUse === "\\Inbox" ||
+          folder.specialUse === "\\Junk" ||
+          name.includes("promotion") ||
+          name.includes("промоакц")
+        );
+      });
+      for (const folder of folders) {
+        const path = folder.path || folder.name;
+        const lock = await c.getMailboxLock(path);
+        try {
+          const validity = String(c.mailbox.uidValidity);
+          const max = Math.max(0, Number(c.mailbox.uidNext || 1) - 1);
+          const previous = await cursorFor(path);
+          const start =
+            previous?.validity === validity
+              ? Number(previous.uid || 0) + 1
+              : Math.max(1, max - 199);
+          let scannedTo = Math.min(max, start - 1);
+          if (start <= max) {
+            for await (const msg of c.fetch(
+              `${start}:${max}`,
+              { envelope: true, labels: true },
+              { uid: true },
+            )) {
+              scannedTo = Math.max(scannedTo, Number(msg.uid || 0));
+              const messageId = msg.envelope?.messageId;
+              if (!messageId || !knownMessageIds.has(messageId)) continue;
+              const folderName = String(path).toLowerCase();
+              const labels = Array.from(msg.labels || [], (label) =>
+                String(label).toLowerCase(),
+              );
+              const isSpam = folder.specialUse === "\\Junk";
+              const isPromotion =
+                folderName.includes("promotion") ||
+                folderName.includes("промоакц") ||
+                labels.some(
+                  (label) =>
+                    label.includes("category promotions") ||
+                    label.includes("promotions") ||
+                    label.includes("промоакц"),
+                );
+              const placement = isSpam
+                ? "spam"
+                : isPromotion
+                  ? "promotions"
+                  : "inbox";
+              let rescuedAt = 0;
+              if (isSpam) {
+                try {
+                  await c.messageMove(msg.uid, "INBOX", { uid: true });
+                  rescuedAt = Date.now();
+                } catch {
+                  // Record the spam placement even when the provider forbids moving it.
+                }
+              }
+              await onPlacement({
+                messageId,
+                provider,
+                placement,
+                folder: path,
+                observedAt: Date.now(),
+                rescuedAt,
+              });
+            }
+          }
+          await onCursor(path, { validity, uid: Math.max(scannedTo, max) });
+        } finally {
+          lock.release();
+        }
+      }
+    } finally {
+      c.close();
+    }
+  }
 }
