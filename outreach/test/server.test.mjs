@@ -123,3 +123,102 @@ test("API requires login, same-origin writes and excludes credentials", async ()
     store.close();
   }
 });
+
+test("mailbox detail, DNS and settings endpoints use the stored mailbox", async () => {
+  const store = new Store(":memory:", "a".repeat(64));
+  const mailbox = store.saveMailbox({
+    email: "owner@example.com",
+    name: "Старое",
+    limit: 10,
+    smtp: { host: "smtp.example.com", port: 465, password: "secret" },
+    imap: { host: "imap.example.com", port: 993, password: "secret" },
+  });
+  store.markMailbox(mailbox.id, true);
+  const dnsCalls = [];
+  const app = module.createApp({
+    store,
+    password: "test-password-long",
+    publicURL: "http://localhost:9100",
+    gateway: {},
+    worker: {},
+    dnsChecker: async (email, options) => {
+      dnsCalls.push({ email, options });
+      return { domain: "example.com", checkedAt: 123, records: [] };
+    },
+  });
+  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${app.address().port}`;
+  const origin = "http://localhost:9100";
+  try {
+    const login = await fetch(base + "/api/login", {
+      method: "POST",
+      headers: { origin },
+      body: JSON.stringify({ password: "test-password-long" }),
+    });
+    const cookie = login.headers.get("set-cookie").split(";")[0];
+    const get = (path) => fetch(base + path, { headers: { cookie } });
+    const post = (path, body) =>
+      fetch(base + path, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const detailResponse = await get(`/api/mailboxes/${mailbox.id}/detail`);
+    assert.equal(detailResponse.status, 200);
+    const detail = await detailResponse.json();
+    assert.equal(detail.mailbox.email, "owner@example.com");
+    assert.equal(detail.activity.length, 30);
+
+    const settingsResponse = await post(
+      `/api/mailboxes/${mailbox.id}/settings`,
+      { name: "Даниил", surname: "Демидов", limit: 30, dkimSelector: "mail" },
+    );
+    assert.equal(settingsResponse.status, 200);
+    const settings = await settingsResponse.json();
+    assert.equal(settings.name, "Даниил");
+    assert.equal(settings.limit, 30);
+    assert.equal(settings.verified, true);
+    assert.equal(settings.smtp.password, undefined);
+
+    const dnsResponse = await get(`/api/mailboxes/${mailbox.id}/dns`);
+    assert.equal(dnsResponse.status, 200);
+    assert.deepEqual(await dnsResponse.json(), {
+      domain: "example.com",
+      checkedAt: 123,
+      records: [],
+    });
+    assert.deepEqual(dnsCalls, [
+      {
+        email: "owner@example.com",
+        options: { selectors: ["mail"] },
+      },
+    ]);
+
+    const customResponse = await post(`/api/mailboxes/${mailbox.id}/warmup`, {
+      enabled: true,
+      consent: true,
+      mode: "custom",
+      start: 3,
+      increase: 2,
+      max: 15,
+      providers: ["google", "yandex"],
+    });
+    assert.equal(customResponse.status, 200);
+    assert.equal((await customResponse.json()).warmup.mode, "custom");
+    const resetResponse = await post(`/api/mailboxes/${mailbox.id}/warmup`, {
+      enabled: true,
+      consent: true,
+      reset: true,
+    });
+    const reset = await resetResponse.json();
+    assert.equal(reset.warmup.mode, "automatic-v1");
+    assert.deepEqual(
+      [reset.warmup.start, reset.warmup.increase, reset.warmup.max],
+      [2, 1, 10],
+    );
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
+    store.close();
+  }
+});

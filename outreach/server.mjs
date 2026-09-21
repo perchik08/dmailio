@@ -6,13 +6,21 @@ import { dirname, join } from "node:path";
 import { Store } from "./store.mjs";
 import { MailGateway } from "./mail.mjs";
 import { Worker } from "./worker.mjs";
+import { checkDomainDNS } from "./dns.mjs";
 import { parseContacts, requireValue, render } from "./core.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
 const sample =
   '\uFEFFemail,name,company,Тема цепочки,Письмо 1,Письмо 2,Письмо 3\r\ndemo@example.com,Иван,Пример,Вопрос для {{company}},"{{name}}, добрый день! Меня зовут {{Имя Отправителя}}.","Возвращаюсь к вопросу, {{name}}.",Подскажите пожалуйста актуально ли предложение?\r\n';
-export function createApp({ store, password, publicURL, gateway, worker }) {
+export function createApp({
+  store,
+  password,
+  publicURL,
+  gateway,
+  worker,
+  dnsChecker = checkDomainDNS,
+}) {
   requireValue(
     typeof password === "string" && password.length >= 16,
     "DMAILIO_PASSWORD: минимум 16 символов",
@@ -147,6 +155,28 @@ export function createApp({ store, password, publicURL, gateway, worker }) {
       if (path === "/api/mailboxes/warmup/bulk" && method === "POST") {
         store.bulkWarmup(data.ids, data.enabled);
         return send(store.mailboxOverview());
+      }
+      const mailboxPage = path.match(
+        /^\/api\/mailboxes\/([^/]+)\/(detail|dns|settings)$/,
+      );
+      if (mailboxPage) {
+        const [, id, action] = mailboxPage;
+        if (action === "detail" && method === "GET")
+          return send(store.mailboxDetail(id));
+        if (action === "settings" && method === "POST")
+          return send(store.saveMailboxSettings(id, data));
+        if (action === "dns" && method === "GET") {
+          const mailbox = store.mailbox(id);
+          const selectors = mailbox.dkimSelector
+            ? [mailbox.dkimSelector]
+            : undefined;
+          return send(
+            await dnsChecker(
+              mailbox.email,
+              selectors ? { selectors } : undefined,
+            ),
+          );
+        }
       }
       if (path === "/api/images" && method === "POST") {
         requireValue(
