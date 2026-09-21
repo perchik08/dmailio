@@ -159,6 +159,27 @@ test("connection settings cannot erase separately saved signature", () => {
   assert.equal(s.mailbox(m.id).signatureEnabled, false);
   s.close();
 });
+
+test("mailbox profile save keeps verified connection and secrets", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const m = s.saveMailbox(mailbox);
+  s.markMailbox(m.id, true);
+  const before = s.mailbox(m.id, true);
+  const saved = s.saveMailboxSettings(m.id, {
+    name: "Анна",
+    surname: "Иванова",
+    limit: 30,
+    dkimSelector: "mail",
+  });
+  assert.equal(saved.verified, true);
+  assert.equal(saved.name, "Анна");
+  assert.equal(saved.surname, "Иванова");
+  assert.equal(saved.limit, 30);
+  assert.equal(saved.dkimSelector, "mail");
+  assert.equal(s.mailbox(m.id, true).smtp.password, before.smtp.password);
+  assert.equal(s.mailbox(m.id, true).imap.password, before.imap.password);
+  s.close();
+});
 test("encrypted secrets never appear in mailbox API and stored ciphertext", () => {
   const { s, m } = setup();
   assert.equal(JSON.stringify(s.mailboxes()).includes("smtp-secret"), false);
@@ -443,6 +464,71 @@ test("automatic warmup follows a fixed fourteen-day progression", () => {
   s.close();
 });
 
+test("custom warmup follows its formula and reset keeps earned history", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const started = new Date("2026-09-01T00:00:00Z").getTime();
+  const m = s.saveMailbox(mailbox);
+  s.markMailbox(m.id, true);
+  s.warmup(
+    m.id,
+    {
+      enabled: true,
+      consent: true,
+      mode: "custom",
+      start: 4,
+      increase: 2,
+      max: 20,
+      providers: ["google"],
+    },
+    started,
+  );
+  for (let day = 0; day < 2; day++) {
+    const message = s.insertMessage(
+      {
+        mailbox_id: m.id,
+        kind: "warmup",
+        recipient: "peer@example.com",
+        subject: `День ${day + 1}`,
+        body: "Тест",
+      },
+      started + day * 86400000,
+    );
+    s.finish(message.id, "sent", started + day * 86400000 + 1);
+  }
+  const custom = s.mailboxOverview(started + 2 * 86400000)[0];
+  assert.equal(custom.warmupProgress.day, 3);
+  assert.equal(custom.currentWarmupLimit, 8);
+  const earned = custom.warmupProgress.score;
+  s.warmup(m.id, { enabled: false, consent: true }, started + 3 * 86400000);
+
+  const reset = s.warmup(
+    m.id,
+    { reset: true, enabled: false, consent: true },
+    started + 10 * 86400000,
+  );
+  assert.deepEqual(
+    {
+      mode: reset.warmup.mode,
+      start: reset.warmup.start,
+      increase: reset.warmup.increase,
+      max: reset.warmup.max,
+      providers: reset.warmup.providers,
+    },
+    {
+      mode: "automatic-v1",
+      start: 2,
+      increase: 1,
+      max: 10,
+      providers: ["google", "yandex", "mailru", "other"],
+    },
+  );
+  assert.equal(reset.warmup.since, started);
+  const after = s.mailboxOverview(started + 10 * 86400000)[0];
+  assert.equal(after.warmupProgress.day, 3);
+  assert.ok(after.warmupProgress.score >= earned);
+  s.close();
+});
+
 test("waiting for a healthy peer does not advance the automatic plan", () => {
   const s = new module.Store(":memory:", "a".repeat(64));
   const started = new Date("2026-09-01T00:00:00Z").getTime();
@@ -632,6 +718,8 @@ test("mailbox overview upgrades legacy configs without warmup settings", () => {
     since: 0,
     pausedAt: 0,
     mode: "automatic-v1",
+    providers: ["google", "yandex", "mailru", "other"],
+    planCredit: 0,
   });
   s.close();
 });

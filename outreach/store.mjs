@@ -16,7 +16,14 @@ import {
 } from "./core.mjs";
 
 const json = JSON.stringify;
-const warmupPlan = [2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10];
+const warmupProviders = ["google", "yandex", "mailru", "other"];
+const automaticWarmupPlan = [2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10];
+const warmupTargets = (warmup) =>
+  warmup.mode === "custom"
+    ? Array.from({ length: 14 }, (_, day) =>
+        Math.min(warmup.max, warmup.start + day * warmup.increase),
+      )
+    : automaticWarmupPlan;
 const warmupLabel = (score) =>
   score >= 95
     ? "Высокий прогрев"
@@ -126,6 +133,8 @@ export class Store {
         since: 0,
         pausedAt: 0,
         mode: "automatic-v1",
+        providers: warmupProviders,
+        planCredit: 0,
       },
     };
     const secrets = {};
@@ -175,6 +184,8 @@ export class Store {
       since: 0,
       pausedAt: 0,
       mode: "automatic-v1",
+      providers: warmupProviders,
+      planCredit: 0,
       ...(cfg.warmup || {}),
     };
     const result = {
@@ -197,6 +208,35 @@ export class Store {
       .prepare("SELECT id FROM mailboxes ORDER BY email")
       .all()
       .map((r) => this.mailbox(r.id));
+  }
+  saveMailboxSettings(id, input) {
+    requireValue(
+      Number.isInteger(input.limit) && input.limit >= 1 && input.limit <= 10000,
+      "Лимит ящика: 1–10000",
+    );
+    const name = String(input.name || "").slice(0, 100);
+    const surname = String(input.surname || "").slice(0, 100);
+    const dkimSelector = String(input.dkimSelector || "")
+      .trim()
+      .toLowerCase();
+    requireValue(
+      !/[\r\n]/.test(name + surname),
+      "Имя не должно содержать переносы",
+    );
+    requireValue(
+      !dkimSelector || /^[a-z0-9_-]{1,63}$/i.test(dkimSelector),
+      "Селектор DKIM: латиница, цифры, дефис или подчёркивание",
+    );
+    const row = this.db
+      .prepare("SELECT config FROM mailboxes WHERE id=?")
+      .get(id);
+    requireValue(row, "Ящик не найден");
+    const cfg = JSON.parse(row.config);
+    Object.assign(cfg, { name, surname, limit: input.limit, dkimSelector });
+    this.db
+      .prepare("UPDATE mailboxes SET config=? WHERE id=?")
+      .run(json(cfg), id);
+    return this.mailbox(id);
   }
   saveSignature(id, input) {
     requireValue(
@@ -931,15 +971,54 @@ export class Store {
       if (!since) since = now;
       pausedAt = 0;
     } else if (!enabled && m.warmup.enabled) pausedAt = now;
+    const mode = input.reset
+      ? "automatic-v1"
+      : input.mode || m.warmup.mode || "automatic-v1";
+    requireValue(
+      ["automatic-v1", "custom"].includes(mode),
+      "Неизвестный режим прогрева",
+    );
+    const start = mode === "custom" ? Number(input.start ?? m.warmup.start) : 2;
+    const increase =
+      mode === "custom" ? Number(input.increase ?? m.warmup.increase) : 1;
+    const max = mode === "custom" ? Number(input.max ?? m.warmup.max) : 10;
+    requireValue(
+      [start, increase, max].every(
+        (value) => Number.isInteger(value) && value >= 1 && value <= 100,
+      ) && start <= max,
+      "Параметры прогрева: 1–100, старт не больше максимума",
+    );
+    const providers = input.reset
+      ? warmupProviders
+      : [...new Set(input.providers || m.warmup.providers || warmupProviders)];
+    requireValue(
+      providers.length > 0 &&
+        providers.every((provider) => warmupProviders.includes(provider)),
+      "Выберите доступные почтовые сервисы для прогрева",
+    );
+    const oldPlan = warmupTargets(m.warmup);
+    const sentSince = since
+      ? this.db
+          .prepare(
+            "SELECT count(*) n FROM messages WHERE mailbox_id=? AND kind='warmup' AND direction='out' AND status='sent' AND created>=?",
+          )
+          .get(id, since).n
+      : 0;
+    const oldCredit = Math.min(
+      1,
+      sentSince / oldPlan.reduce((sum, value) => sum + value, 0),
+    );
     const w = {
       enabled,
       consent: !!input.consent,
-      start: 2,
-      increase: 1,
-      max: 10,
+      start,
+      increase,
+      max,
       since,
       pausedAt,
-      mode: "automatic-v1",
+      mode,
+      providers,
+      planCredit: Math.max(m.warmup.planCredit || 0, oldCredit),
     };
     requireValue(
       !w.enabled || (w.consent && m.verified),
@@ -1021,6 +1100,7 @@ export class Store {
       FROM messages WHERE mailbox_id=? AND kind='warmup'`,
     );
     return mailboxes.map((m) => {
+      const plan = warmupTargets(m.warmup);
       const since = m.warmup.since || now;
       const current = new Date(now);
       const utcDayStart = Date.UTC(
@@ -1061,15 +1141,12 @@ export class Store {
       else if (m.warmup?.enabled && m.warmup.consent)
         warmupStatus = activePool >= 2 ? "warming" : "waiting";
       const day = Math.min(
-        warmupPlan.length,
+        plan.length,
         Math.max(1, warmupStats.activeDays + (warmupStats.sentToday ? 0 : 1)),
       );
-      const programFraction = Math.min(
-        1,
-        warmupStats.activeDays / warmupPlan.length,
-      );
-      const expected = warmupPlan.slice(0, day).reduce((a, b) => a + b, 0);
-      const totalPlan = warmupPlan.reduce((a, b) => a + b, 0);
+      const programFraction = Math.min(1, warmupStats.activeDays / plan.length);
+      const expected = plan.slice(0, day).reduce((a, b) => a + b, 0);
+      const totalPlan = plan.reduce((a, b) => a + b, 0);
       const attemptsSince =
         warmupStats.sentSince +
         warmupStats.failedSince +
@@ -1077,7 +1154,13 @@ export class Store {
       const success = attemptsSince ? warmupStats.sentSince / attemptsSince : 0;
       const progressParts = {
         duration: Math.round(40 * programFraction),
-        plan: Math.round(25 * Math.min(1, warmupStats.sentSince / totalPlan)),
+        plan: Math.round(
+          25 *
+            Math.max(
+              m.warmup.planCredit || 0,
+              Math.min(1, warmupStats.sentSince / totalPlan),
+            ),
+        ),
         sending: Math.round(20 * programFraction * success),
         receiving: Math.round(
           15 * programFraction * Number(warmupStats.receivedSince > 0),
@@ -1091,13 +1174,13 @@ export class Store {
         ...m,
         warmupStatus,
         warmupStats,
-        currentWarmupLimit: warmupPlan[day - 1],
+        currentWarmupLimit: plan[day - 1],
         warmupProgress: {
           score: progressScore,
           label: warmupLabel(progressScore),
           day,
-          totalDays: warmupPlan.length,
-          target: warmupPlan[day - 1],
+          totalDays: plan.length,
+          target: plan[day - 1],
           expected,
           parts: progressParts,
         },
@@ -1115,6 +1198,7 @@ export class Store {
       );
       if (pool.length < 2) return null;
       const eligible = (m) => {
+        const plan = warmupTargets(m.warmup);
         const current = new Date(now);
         const utcDayStart = Date.UTC(
           current.getUTCFullYear(),
@@ -1131,10 +1215,10 @@ export class Store {
           )
           .get(m.warmup.since || now, utcDayStart, m.id);
         const day = Math.min(
-          warmupPlan.length,
+          plan.length,
           Math.max(1, program.activeDays + (program.sentToday ? 0 : 1)),
         );
-        const limit = warmupPlan[day - 1];
+        const limit = plan[day - 1];
         const count = this.db
           .prepare(
             "SELECT count(*) n FROM messages WHERE mailbox_id=? AND kind='warmup' AND direction='out' AND created>?",
