@@ -76,3 +76,23 @@ test("DNS diagnostics do not report null MX or revoked DKIM as healthy", async (
   assert.equal(result.spf.status, "ok");
   assert.equal(result.dmarc.status, "ok");
 });
+
+test("a timed out DNS record does not hide completed record checks", async () => {
+  const resolver = {
+    resolveMx: async () => [{ priority: 10, exchange: "mx.example.com" }],
+    resolveTxt: async (name) => {
+      if (name === "_dmarc.example.com") return new Promise(() => {});
+      if (name === "example.com") return [["v=spf1 -all"]];
+      return [["v=DKIM1; p=abc"]];
+    },
+  };
+  const result = await checkDomainDNS("sender@example.com", {
+    resolver,
+    selectors: ["default"],
+    timeoutMs: 100,
+  });
+  assert.equal(result.mx.status, "ok");
+  assert.equal(result.spf.status, "ok");
+  assert.equal(result.dkim.status, "ok");
+  assert.equal(result.dmarc.status, "unavailable");
+});

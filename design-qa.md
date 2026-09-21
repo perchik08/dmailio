@@ -28,6 +28,8 @@
 
 - First desktop comparison found a red baseline on zero-value chart days; the zero-state stack calculation was corrected.
 - Live `example.com` DNS exposed a null MX and empty DKIM key; semantic validation was added so both display “Нужно настроить”.
+- Final code review expanded the activity chart to include sent, replies, unknown placement, and rescued series; provider rows now expose their unknown count.
+- Provider filters now affect recipient selection and the visible waiting state instead of being presentation-only.
 - Final browser review found no Dmailio console warnings or errors.
 
 **Follow-up Polish**

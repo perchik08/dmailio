@@ -263,6 +263,7 @@ export class MailGateway {
               ? Number(previous.uid || 0) + 1
               : Math.max(1, max - 199);
           let scannedTo = Math.min(max, start - 1);
+          const observations = [];
           if (start <= max) {
             for await (const msg of c.fetch(
               `${start}:${max}`,
@@ -291,24 +292,32 @@ export class MailGateway {
                 : isPromotion
                   ? "promotions"
                   : "inbox";
-              let rescuedAt = 0;
-              if (isSpam) {
-                try {
-                  await c.messageMove(msg.uid, "INBOX", { uid: true });
-                  rescuedAt = Date.now();
-                } catch {
-                  // Record the spam placement even when the provider forbids moving it.
-                }
-              }
-              await onPlacement({
+              observations.push({
+                uid: msg.uid,
                 messageId,
                 provider,
                 placement,
                 folder: path,
-                observedAt: Date.now(),
-                rescuedAt,
+                isSpam,
               });
             }
+          }
+          for (const observation of observations) {
+            let rescuedAt = 0;
+            if (observation.isSpam) {
+              try {
+                await c.messageMove(observation.uid, "INBOX", { uid: true });
+                rescuedAt = Date.now();
+              } catch {
+                // Record the spam placement even when the provider forbids moving it.
+              }
+            }
+            const { uid, isSpam, ...event } = observation;
+            await onPlacement({
+              ...event,
+              observedAt: Date.now(),
+              rescuedAt,
+            });
           }
           await onCursor(path, { validity, uid: Math.max(scannedTo, max) });
         } finally {

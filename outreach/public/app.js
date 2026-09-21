@@ -677,26 +677,44 @@ function renderMailboxStats(detail) {
   const m = detail.mailbox;
   const maxActivity = Math.max(
     1,
-    ...detail.activity.map((day) => day.inbox + day.spam + day.promotions),
+    ...detail.activity.flatMap((day) => [
+      day.sent + day.replies,
+      day.inbox + day.spam + day.promotions + day.unknown,
+      day.rescued,
+    ]),
   );
   const content = document.querySelector("#mailbox-detail-content");
-  content.innerHTML = `<div class="detail-metrics"><div class="detail-metric accent"><span>Прогрето</span><strong>${m.warmupProgress.score}%</strong><small>${escape(m.warmupProgress.label)} · день ${m.warmupProgress.day} из 14</small></div><div class="detail-metric"><span>Здоровье ящика</span><strong>${m.health.score}</strong><small>Техническая оценка из 100</small></div><div class="detail-metric"><span>Отправлено писем</span><strong>${detail.summary.sent}</strong><small>Внутри прогрева</small></div><div class="detail-metric"><span>Получено ответов</span><strong>${detail.summary.replies}</strong><small>Ответы между ящиками</small></div><div class="detail-metric"><span>Спасено из спама</span><strong>${detail.summary.rescued}</strong><small>Перенесено во входящие</small></div></div>${m.error ? `<div class="alert connection-error">${escape(m.error)}</div>` : ""}<section class="panel"><div class="section-head"><div><h2>Активность за 30 дней</h2><p class="hint">Реальные результаты контрольных писем прогрева</p></div><div class="chart-legend"><span class="inbox-dot">Входящие</span><span class="promo-dot">Промоакции</span><span class="spam-dot">Спам</span></div></div><div class="activity-chart" aria-label="Активность прогрева за 30 дней">${detail.activity
+  content.innerHTML = `<div class="detail-metrics"><div class="detail-metric accent"><span>Прогрето</span><strong>${m.warmupProgress.score}%</strong><small>${escape(m.warmupProgress.label)} · день ${m.warmupProgress.day} из 14</small></div><div class="detail-metric"><span>Здоровье ящика</span><strong>${m.health.score}</strong><small>Техническая оценка из 100</small></div><div class="detail-metric"><span>Отправлено писем</span><strong>${detail.summary.sent}</strong><small>Внутри прогрева</small></div><div class="detail-metric"><span>Получено ответов</span><strong>${detail.summary.replies}</strong><small>Ответы между ящиками</small></div><div class="detail-metric"><span>Спасено из спама</span><strong>${detail.summary.rescued}</strong><small>Перенесено во входящие</small></div></div>${m.error ? `<div class="alert connection-error">${escape(m.error)}</div>` : ""}<section class="panel"><div class="section-head"><div><h2>Активность за 30 дней</h2><p class="hint">Реальные результаты контрольных писем прогрева</p></div><div class="chart-legend"><span class="sent-dot">Отправлено</span><span class="reply-dot">Ответы</span><span class="inbox-dot">Входящие</span><span class="promo-dot">Промоакции</span><span class="spam-dot">Спам</span><span class="unknown-dot">Нет данных</span><span class="rescued-dot">Спасено</span></div></div><div class="activity-chart" aria-label="Активность прогрева за 30 дней">${detail.activity
     .map((day, index) => {
-      const total = day.inbox + day.promotions + day.spam;
-      const height = Math.max(2, Math.round((total / maxActivity) * 150));
-      const inbox = total ? Math.round((day.inbox / total) * 100) : 0;
-      const promotions = total ? Math.round((day.promotions / total) * 100) : 0;
-      const spam = total ? Math.max(0, 100 - inbox - promotions) : 0;
-      return `<div class="activity-day" title="${escape(day.date)} · входящие ${day.inbox}, промоакции ${day.promotions}, спам ${day.spam}"><div class="activity-bar ${total ? "" : "empty-bar"}" style="height:${height}px"><span class="bar-inbox" style="height:${inbox}%"></span><span class="bar-promotions" style="height:${promotions}%"></span><span class="bar-spam" style="height:${spam}%"></span></div>${index % 5 === 0 || index === 29 ? `<small>${new Date(day.date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</small>` : "<small></small>"}</div>`;
+      const traffic = day.sent + day.replies;
+      const placement = day.inbox + day.promotions + day.spam + day.unknown;
+      const percent = (value, total) =>
+        total ? Math.round((value / total) * 100) : 0;
+      const bar = (kind, total, parts) =>
+        `<div class="activity-bar ${total ? "" : "empty-bar"}" style="height:${Math.max(2, Math.round((total / maxActivity) * 150))}px" aria-label="${kind}">${parts.join("")}</div>`;
+      const trafficBar = bar("Отправлено и ответы", traffic, [
+        `<span class="bar-sent" style="height:${percent(day.sent, traffic)}%"></span>`,
+        `<span class="bar-replies" style="height:${percent(day.replies, traffic)}%"></span>`,
+      ]);
+      const placementBar = bar("Размещение", placement, [
+        `<span class="bar-inbox" style="height:${percent(day.inbox, placement)}%"></span>`,
+        `<span class="bar-promotions" style="height:${percent(day.promotions, placement)}%"></span>`,
+        `<span class="bar-spam" style="height:${percent(day.spam, placement)}%"></span>`,
+        `<span class="bar-unknown" style="height:${percent(day.unknown, placement)}%"></span>`,
+      ]);
+      const rescuedBar = bar("Спасено", day.rescued, [
+        `<span class="bar-rescued" style="height:${day.rescued ? 100 : 0}%"></span>`,
+      ]);
+      return `<div class="activity-day" title="${escape(day.date)} · отправлено ${day.sent}, ответы ${day.replies}, входящие ${day.inbox}, промоакции ${day.promotions}, спам ${day.spam}, нет данных ${day.unknown}, спасено ${day.rescued}"><div class="activity-pair">${trafficBar}${placementBar}${rescuedBar}</div>${index % 5 === 0 || index === 29 ? `<small>${new Date(day.date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</small>` : "<small></small>"}</div>`;
     })
     .join(
       "",
-    )}</div>${detail.activity.every((day) => !day.inbox && !day.spam && !day.promotions) ? '<p class="chart-empty">Данные появятся после первых контрольных писем.</p>' : ""}</section><section class="panel"><h2>Статистика по почтовым провайдерам</h2><p class="hint">Показываем только проверенные Dmailio письма. Личные сообщения не читаются.</p>${
+    )}</div>${detail.activity.every((day) => !day.sent && !day.replies && !day.inbox && !day.spam && !day.promotions && !day.unknown && !day.rescued) ? '<p class="chart-empty">Данные появятся после первых контрольных писем.</p>' : ""}</section><section class="panel"><h2>Статистика по почтовым провайдерам</h2><p class="hint">Показываем только проверенные Dmailio письма. Личные сообщения не читаются.</p>${
     detail.providers.length
       ? `<div class="provider-list">${detail.providers
           .map((row) => {
             const value = (n) => Math.round((n / row.total) * 100);
-            return `<div class="provider-row"><strong>${escape(providerNames[row.provider] || row.provider)}</strong><div class="provider-bar" title="Входящие ${row.inbox}, промоакции ${row.promotions}, спам ${row.spam}"><span class="bar-inbox" style="width:${value(row.inbox)}%"></span><span class="bar-promotions" style="width:${value(row.promotions)}%"></span><span class="bar-spam" style="width:${value(row.spam)}%"></span></div><span>${value(row.inbox)}% входящих</span></div>`;
+            return `<div class="provider-row"><strong>${escape(providerNames[row.provider] || row.provider)}</strong><div class="provider-bar" title="Входящие ${row.inbox}, промоакции ${row.promotions}, спам ${row.spam}, нет данных ${row.unknown}"><span class="bar-inbox" style="width:${value(row.inbox)}%"></span><span class="bar-promotions" style="width:${value(row.promotions)}%"></span><span class="bar-spam" style="width:${value(row.spam)}%"></span><span class="bar-unknown" style="width:${value(row.unknown)}%"></span></div><span>${value(row.inbox)}% входящих · без данных ${row.unknown}</span></div>`;
           })
           .join("")}</div>`
       : '<div class="soft-empty">Пока нет проверенных доставок по провайдерам.</div>'

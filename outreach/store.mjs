@@ -18,6 +18,13 @@ import {
 const json = JSON.stringify;
 const warmupProviders = ["google", "yandex", "mailru", "other"];
 const automaticWarmupPlan = [2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10];
+const mailboxProvider = (mailbox) => {
+  const host = String(mailbox.imap?.host || "").toLowerCase();
+  if (host.includes("gmail") || host.includes("google")) return "google";
+  if (host.includes("yandex")) return "yandex";
+  if (host.includes("mail.ru") || host.includes("vk")) return "mailru";
+  return "other";
+};
 const warmupTargets = (warmup) =>
   warmup.mode === "custom"
     ? Array.from({ length: 14 }, (_, day) =>
@@ -124,6 +131,7 @@ export class Store {
         old?.signature ?? String(input.signature || "").slice(0, 20000),
       signatureFormat: old?.signatureFormat || "plain",
       signatureEnabled: old?.signatureEnabled !== false,
+      dkimSelector: old?.dkimSelector ?? "",
       limit: input.limit,
       enabled: input.enabled !== false,
       warmup: old?.warmup || {
@@ -1245,7 +1253,7 @@ export class Store {
         !m.error &&
         m.warmup?.enabled &&
         m.warmup.consent,
-    ).length;
+    );
     const stats = this.db.prepare(
       `SELECT
         coalesce(sum(direction='out' AND status='sent'),0) sent,
@@ -1303,7 +1311,13 @@ export class Store {
       if (!m.verified) warmupStatus = "unverified";
       else if (!m.enabled || m.error) warmupStatus = "error";
       else if (m.warmup?.enabled && m.warmup.consent)
-        warmupStatus = activePool >= 2 ? "warming" : "waiting";
+        warmupStatus = activePool.some(
+          (peer) =>
+            peer.id !== m.id &&
+            m.warmup.providers.includes(mailboxProvider(peer)),
+        )
+          ? "warming"
+          : "waiting";
       const day = Math.min(
         plan.length,
         Math.max(1, warmupStats.activeDays + (warmupStats.sentToday ? 0 : 1)),
@@ -1397,9 +1411,13 @@ export class Store {
         .all(now - 1800000);
       for (const incoming of waiting) {
         const m = pool.find((m) => m.id === incoming.mailbox_id);
+        const originalSender = pool.find(
+          (peer) => peer.email === incoming.recipient,
+        );
         if (
           m &&
-          pool.some((p) => p.email === incoming.recipient) &&
+          originalSender &&
+          m.warmup.providers.includes(mailboxProvider(originalSender)) &&
           eligible(m)
         )
           return this.insertMessage(
@@ -1417,8 +1435,13 @@ export class Store {
       for (const m of pool) {
         if (!eligible(m)) continue;
         const target = pool
-          .filter((p) => p.id !== m.id)
+          .filter(
+            (peer) =>
+              peer.id !== m.id &&
+              m.warmup.providers.includes(mailboxProvider(peer)),
+          )
           .sort((a, b) => this.load(a.id, now) - this.load(b.id, now))[0];
+        if (!target) continue;
         return this.insertMessage(
           {
             mailbox_id: m.id,

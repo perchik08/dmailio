@@ -594,6 +594,14 @@ code {
 .bar-inbox {
   background: #6edb91;
 }
+.sent-dot::before,
+.bar-sent {
+  background: #7583f7;
+}
+.reply-dot::before,
+.bar-replies {
+  background: #9a70dc;
+}
 .promo-dot::before,
 .bar-promotions {
   background: #f4be6c;
@@ -601,6 +609,14 @@ code {
 .spam-dot::before,
 .bar-spam {
   background: #ff8f88;
+}
+.unknown-dot::before,
+.bar-unknown {
+  background: #adb3c2;
+}
+.rescued-dot::before,
+.bar-rescued {
+  background: #43b7bd;
 }
 .activity-chart {
   display: grid;
@@ -625,6 +641,12 @@ code {
   gap: 8px;
   min-width: 12px;
 }
+.activity-pair {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  gap: 2px;
+}
 .activity-day small {
   height: 28px;
   color: #84899a;
@@ -635,7 +657,7 @@ code {
   display: flex;
   flex-direction: column;
   justify-content: end;
-  width: 100%;
+  width: 31%;
   min-height: 2px;
   overflow: hidden;
   border-radius: 5px 5px 0 0;

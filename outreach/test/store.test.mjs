@@ -154,9 +154,16 @@ test("connection settings cannot erase separately saved signature", () => {
     format: "markdown",
     enabled: false,
   });
+  s.saveMailboxSettings(m.id, {
+    name: m.name,
+    surname: m.surname,
+    limit: m.limit,
+    dkimSelector: "mail",
+  });
   s.saveMailbox({ ...mailbox, id: m.id });
   assert.equal(s.mailbox(m.id).signature, "**Подпись**");
   assert.equal(s.mailbox(m.id).signatureEnabled, false);
+  assert.equal(s.mailbox(m.id).dkimSelector, "mail");
   s.close();
 });
 
@@ -876,5 +883,74 @@ test("bulk warmup refuses a pool with fewer than two verified mailboxes", () => 
     /минимум два проверенных ящика/,
   );
   assert.equal(s.mailbox(first.id).warmup.enabled, false);
+  s.close();
+});
+
+test("warmup sends only to selected recipient providers and waits without one", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const source = s.saveMailbox({
+    ...mailbox,
+    email: "a-source@example.com",
+    imap: {
+      ...mailbox.imap,
+      host: "imap.example.com",
+      user: "a-source@example.com",
+    },
+    smtp: { ...mailbox.smtp, user: "a-source@example.com" },
+  });
+  const google = s.saveMailbox({
+    ...mailbox,
+    email: "google@example.com",
+    imap: {
+      ...mailbox.imap,
+      host: "imap.gmail.com",
+      user: "google@example.com",
+    },
+    smtp: { ...mailbox.smtp, user: "google@example.com" },
+  });
+  const yandex = s.saveMailbox({
+    ...mailbox,
+    email: "yandex@example.com",
+    imap: {
+      ...mailbox.imap,
+      host: "imap.yandex.ru",
+      user: "yandex@example.com",
+    },
+    smtp: { ...mailbox.smtp, user: "yandex@example.com" },
+  });
+  for (const item of [source, google, yandex]) {
+    s.markMailbox(item.id, true);
+    s.warmup(item.id, { enabled: true, consent: true }, 1000);
+  }
+  s.warmup(source.id, {
+    enabled: true,
+    consent: true,
+    mode: "custom",
+    start: 2,
+    increase: 1,
+    max: 10,
+    providers: ["google"],
+  });
+  const message = s.reserveWarmup(
+    2000000,
+    new Set([source.id, google.id, yandex.id]),
+  );
+  assert.equal(message.mailbox_id, source.id);
+  assert.equal(message.recipient, google.email);
+  s.finish(message.id, "sent", 2000001);
+  s.warmup(source.id, {
+    enabled: true,
+    consent: true,
+    mode: "custom",
+    start: 2,
+    increase: 1,
+    max: 10,
+    providers: ["mailru"],
+  });
+  assert.equal(
+    s.mailboxOverview(4000000).find((item) => item.id === source.id)
+      .warmupStatus,
+    "waiting",
+  );
   s.close();
 });

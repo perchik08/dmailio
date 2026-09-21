@@ -128,6 +128,7 @@ test("delivery status report is classified separately from a human response", as
 test("placement inspection moves only allowlisted warmup messages from spam", async () => {
   const gateway = new MailGateway({}, "https://example.com");
   let folder = "";
+  let fetching = false;
   const moved = [];
   gateway.imap = () => ({
     connect: async () => {},
@@ -144,11 +145,17 @@ test("placement inspection moves only allowlisted warmup messages from spam", as
     },
     close() {},
     async *fetch() {
-      if (folder !== "Junk") return;
-      yield { uid: 1, envelope: { messageId: "<known@example.com>" } };
-      yield { uid: 2, envelope: { messageId: "<personal@example.com>" } };
+      fetching = true;
+      try {
+        if (folder !== "Junk") return;
+        yield { uid: 1, envelope: { messageId: "<known@example.com>" } };
+        yield { uid: 2, envelope: { messageId: "<personal@example.com>" } };
+      } finally {
+        fetching = false;
+      }
     },
     async messageMove(uid, destination, options) {
+      assert.equal(fetching, false, "IMAP commands must run after fetch ends");
       moved.push({ uid, destination, options });
       return true;
     },

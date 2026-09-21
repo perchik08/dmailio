@@ -53,6 +53,24 @@ export async function checkDomainDNS(address, options = {}) {
   const domain = domainToASCII(match[1].toLowerCase());
   if (!domain) throw new Error("Email is invalid");
   const resolver = options.resolver || dns;
+  const timeoutMs = Math.max(100, Math.min(10000, options.timeoutMs || 10000));
+  const withTimeout = (promise, extra = {}) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(
+        () => resolve(failure({ code: "ETIMEOUT" }, extra)),
+        timeoutMs,
+      );
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timer);
+          resolve(failure(error, extra));
+        },
+      );
+    });
   const selectors = [
     ...new Set(
       (options.selectors?.length
@@ -103,28 +121,12 @@ export async function checkDomainDNS(address, options = {}) {
       selector: "",
     };
   })();
-  const timeoutMs = Math.max(100, Math.min(10000, options.timeoutMs || 10000));
-  const checks = Promise.all([
-    mxPromise,
-    spfPromise,
-    dmarcPromise,
-    dkimPromise,
+  const [mx, spf, dmarc, dkim] = await Promise.all([
+    withTimeout(mxPromise),
+    withTimeout(spfPromise),
+    withTimeout(dmarcPromise),
+    withTimeout(dkimPromise, { selector: "" }),
   ]);
-  let timer;
-  const timeout = new Promise((resolve) => {
-    timer = setTimeout(
-      () =>
-        resolve([
-          failure({ code: "ETIMEOUT" }),
-          failure({ code: "ETIMEOUT" }),
-          failure({ code: "ETIMEOUT" }),
-          { ...failure({ code: "ETIMEOUT" }), selector: "" },
-        ]),
-      timeoutMs,
-    );
-  });
-  const [mx, spf, dmarc, dkim] = await Promise.race([checks, timeout]);
-  clearTimeout(timer);
   return {
     domain,
     checkedAt: (options.now || Date.now)(),
