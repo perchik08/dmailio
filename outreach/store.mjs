@@ -16,6 +16,19 @@ import {
 } from "./core.mjs";
 
 const json = JSON.stringify;
+const warmupPlan = [2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10];
+const warmupLabel = (score) =>
+  score >= 95
+    ? "Высокий прогрев"
+    : score >= 80
+      ? "Хорошо прогрет"
+      : score >= 60
+        ? "Хорошая динамика"
+        : score >= 40
+          ? "Прогревается"
+          : score >= 20
+            ? "Набирает историю"
+            : "Старт";
 export class Store {
   constructor(path, key) {
     requireValue(
@@ -111,6 +124,8 @@ export class Store {
         increase: 1,
         max: 10,
         since: 0,
+        pausedAt: 0,
+        mode: "automatic-v1",
       },
     };
     const secrets = {};
@@ -158,6 +173,8 @@ export class Store {
       increase: 1,
       max: 10,
       since: 0,
+      pausedAt: 0,
+      mode: "automatic-v1",
       ...(cfg.warmup || {}),
     };
     const result = {
@@ -907,20 +924,23 @@ export class Store {
   }
   warmup(id, input, now = Date.now()) {
     const m = this.mailbox(id);
+    const enabled = !!input.enabled;
+    let since = m.warmup.since || 0;
+    let pausedAt = m.warmup.pausedAt || 0;
+    if (enabled && !m.warmup.enabled) {
+      if (!since) since = now;
+      pausedAt = 0;
+    } else if (!enabled && m.warmup.enabled) pausedAt = now;
     const w = {
-      enabled: !!input.enabled,
+      enabled,
       consent: !!input.consent,
-      start: Number(input.start),
-      increase: Number(input.increase),
-      max: Number(input.max),
-      since: m.warmup?.since || now,
+      start: 2,
+      increase: 1,
+      max: 10,
+      since,
+      pausedAt,
+      mode: "automatic-v1",
     };
-    requireValue(
-      [w.start, w.increase, w.max].every(
-        (n) => Number.isInteger(n) && n >= 1 && n <= 100,
-      ) && w.start <= w.max,
-      "Параметры прогрева: 1–100, старт не больше максимума",
-    );
     requireValue(
       !w.enabled || (w.consent && m.verified),
       "Для прогрева нужны согласие владельца и проверенное подключение",
@@ -991,11 +1011,34 @@ export class Store {
         coalesce(sum(direction='out' AND status='failed'),0) failed,
         coalesce(sum(direction='out' AND status='unknown'),0) uncertain,
         coalesce(sum(direction='out' AND status='sent' AND created>=?),0) sent24h,
-        coalesce(sum(direction='in' AND parent IS NOT NULL AND created>=?),0) replies24h
+        coalesce(sum(direction='in' AND parent IS NOT NULL AND created>=?),0) replies24h,
+        coalesce(sum(direction='out' AND status='sent' AND created>=?),0) sentSince,
+        coalesce(sum(direction='out' AND status='failed' AND created>=?),0) failedSince,
+        coalesce(sum(direction='out' AND status='unknown' AND created>=?),0) uncertainSince,
+        coalesce(sum(direction='in' AND created>=?),0) receivedSince,
+        count(DISTINCT CASE WHEN direction='out' AND status='sent' AND created>=? THEN strftime('%Y-%m-%d',created/1000.0,'unixepoch') END) activeDays,
+        coalesce(sum(direction='out' AND status='sent' AND created>=?),0) sentToday
       FROM messages WHERE mailbox_id=? AND kind='warmup'`,
     );
     return mailboxes.map((m) => {
-      const warmupStats = stats.get(now - 86400000, now - 86400000, m.id);
+      const since = m.warmup.since || now;
+      const current = new Date(now);
+      const utcDayStart = Date.UTC(
+        current.getUTCFullYear(),
+        current.getUTCMonth(),
+        current.getUTCDate(),
+      );
+      const warmupStats = stats.get(
+        now - 86400000,
+        now - 86400000,
+        since,
+        since,
+        since,
+        since,
+        since,
+        utcDayStart,
+        m.id,
+      );
       const connectionHealthy = m.verified && m.enabled && !m.error;
       const attempts =
         warmupStats.sent + warmupStats.failed + warmupStats.uncertain;
@@ -1017,17 +1060,47 @@ export class Store {
       else if (!m.enabled || m.error) warmupStatus = "error";
       else if (m.warmup?.enabled && m.warmup.consent)
         warmupStatus = activePool >= 2 ? "warming" : "waiting";
-      const days = m.warmup?.since
-        ? Math.max(0, Math.floor((now - m.warmup.since) / 86400000))
-        : 0;
+      const day = Math.min(
+        warmupPlan.length,
+        Math.max(1, warmupStats.activeDays + (warmupStats.sentToday ? 0 : 1)),
+      );
+      const programFraction = Math.min(
+        1,
+        warmupStats.activeDays / warmupPlan.length,
+      );
+      const expected = warmupPlan.slice(0, day).reduce((a, b) => a + b, 0);
+      const totalPlan = warmupPlan.reduce((a, b) => a + b, 0);
+      const attemptsSince =
+        warmupStats.sentSince +
+        warmupStats.failedSince +
+        warmupStats.uncertainSince;
+      const success = attemptsSince ? warmupStats.sentSince / attemptsSince : 0;
+      const progressParts = {
+        duration: Math.round(40 * programFraction),
+        plan: Math.round(25 * Math.min(1, warmupStats.sentSince / totalPlan)),
+        sending: Math.round(20 * programFraction * success),
+        receiving: Math.round(
+          15 * programFraction * Number(warmupStats.receivedSince > 0),
+        ),
+      };
+      const progressScore = Object.values(progressParts).reduce(
+        (sum, value) => sum + value,
+        0,
+      );
       return {
         ...m,
         warmupStatus,
         warmupStats,
-        currentWarmupLimit: Math.min(
-          m.warmup.max,
-          m.warmup.start + days * m.warmup.increase,
-        ),
+        currentWarmupLimit: warmupPlan[day - 1],
+        warmupProgress: {
+          score: progressScore,
+          label: warmupLabel(progressScore),
+          day,
+          totalDays: warmupPlan.length,
+          target: warmupPlan[day - 1],
+          expected,
+          parts: progressParts,
+        },
         health: {
           score: Object.values(parts).reduce((sum, value) => sum + value, 0),
           parts,
@@ -1042,12 +1115,26 @@ export class Store {
       );
       if (pool.length < 2) return null;
       const eligible = (m) => {
-        const limit = Math.min(
-          m.warmup.max,
-          m.warmup.start +
-            Math.max(0, Math.floor((now - m.warmup.since) / 86400000)) *
-              m.warmup.increase,
+        const current = new Date(now);
+        const utcDayStart = Date.UTC(
+          current.getUTCFullYear(),
+          current.getUTCMonth(),
+          current.getUTCDate(),
         );
+        const program = this.db
+          .prepare(
+            `SELECT
+              count(DISTINCT CASE WHEN status='sent' AND created>=? THEN strftime('%Y-%m-%d',created/1000.0,'unixepoch') END) activeDays,
+              coalesce(sum(status='sent' AND created>=?),0) sentToday
+            FROM messages
+            WHERE mailbox_id=? AND kind='warmup' AND direction='out'`,
+          )
+          .get(m.warmup.since || now, utcDayStart, m.id);
+        const day = Math.min(
+          warmupPlan.length,
+          Math.max(1, program.activeDays + (program.sentToday ? 0 : 1)),
+        );
+        const limit = warmupPlan[day - 1];
         const count = this.db
           .prepare(
             "SELECT count(*) n FROM messages WHERE mailbox_id=? AND kind='warmup' AND direction='out' AND created>?",

@@ -44,6 +44,13 @@ const labels = {
 const badge = (s) =>
   `<span class="badge ${escape(s)}">${escape(labels[s] || s)}</span>`;
 const date = (t) => (t ? new Date(t).toLocaleString("ru-RU") : "—");
+const mailWord = (n) => {
+  const lastTwo = n % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return "писем";
+  if (n % 10 === 1) return "письмо";
+  if (n % 10 >= 2 && n % 10 <= 4) return "письма";
+  return "писем";
+};
 let state = { mailboxes: [], campaigns: [] },
   page = "campaigns",
   current = null,
@@ -439,16 +446,19 @@ function mailboxes() {
   const warmupRows = state.mailboxes.filter((m) =>
     ["warming", "waiting"].includes(m.warmupStatus),
   ).length;
-  const attention = state.mailboxes.filter((m) =>
-    ["unverified", "error"].includes(m.warmupStatus),
-  ).length;
+  const averageWarmup = state.mailboxes.length
+    ? Math.round(
+        state.mailboxes.reduce((sum, m) => sum + m.warmupProgress.score, 0) /
+          state.mailboxes.length,
+      )
+    : 0;
   shell(
     `<div class="top"><div><h1>Почты</h1><p class="hint">Подключения, прогрев и техническое состояние ящиков</p></div><button id="add-mailbox" class="primary">+ Подключить почту</button></div>${
       state.mailboxes.length
-        ? `<div class="mailbox-summary" aria-label="Сводка по почтам"><div><span>Всего ящиков</span><strong>${state.mailboxes.length}</strong></div><div><span>Прогрев включён</span><strong>${warmupRows}</strong></div><div><span>Нужны действия</span><strong>${attention}</strong></div></div><div class="alert warmup-note"><strong>Прогрев</strong> — контрольная переписка между вашими проверенными ящиками. Нужны минимум два ящика с разрешением владельцев. Показатель здоровья отражает подключение и обмен письмами, но не гарантирует попадание во входящие.</div><section class="mailbox-panel"><div class="mailbox-toolbar"><label class="mailbox-search">Поиск<input id="mailbox-search" type="search" placeholder="Имя или адрес почты"></label><div class="bulk-actions"><span id="selected-count">Ничего не выбрано</span><button id="bulk-start" class="primary" disabled>Включить прогрев</button><button id="bulk-pause" disabled>Поставить на паузу</button></div></div><div class="table-scroll"><table class="mailbox-table"><thead><tr><th class="select-cell"><input id="select-all-mailboxes" type="checkbox" aria-label="Выбрать все почты"></th><th>Прогрев</th><th>Ящик</th><th>Статус прогрева</th><th>Отправлено</th><th>Ответы</th><th>Здоровье</th><th>Действия</th></tr></thead><tbody>${state.mailboxes
+        ? `<div class="mailbox-summary" aria-label="Сводка по почтам"><div><span>Всего ящиков</span><strong>${state.mailboxes.length}</strong></div><div><span>Прогрев включён</span><strong>${warmupRows}</strong></div><div><span>Средний прогрев</span><strong>${averageWarmup}%</strong></div></div><div class="alert warmup-note"><strong>Автопрогрев</strong> рассчитан на 14 активных дней: Dmailio сам плавно увеличивает объём с 2 до 10 писем в день. Процент учитывает активные дни, выполнение плана, успешную отправку и получение писем. Это ориентир готовности, а не гарантия попадания во входящие.</div><section class="mailbox-panel"><div class="mailbox-toolbar"><label class="mailbox-search">Поиск<input id="mailbox-search" type="search" placeholder="Имя или адрес почты"></label><div class="bulk-actions"><span id="selected-count">Ничего не выбрано</span><button id="bulk-start" class="primary" disabled>Включить прогрев</button><button id="bulk-pause" disabled>Поставить на паузу</button></div></div><div class="table-scroll"><table class="mailbox-table"><thead><tr><th class="select-cell"><input id="select-all-mailboxes" type="checkbox" aria-label="Выбрать все почты"></th><th>Вкл.</th><th>Ящик</th><th>Прогрето</th><th>Отправлено</th><th>Ответы</th><th>Здоровье</th><th>Действия</th></tr></thead><tbody>${state.mailboxes
             .map(
               (m) =>
-                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td><label class="switch" title="Включить или приостановить прогрев"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-warmup-settings="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td><button class="status-button" data-warmup-settings="${m.id}">${badge(m.warmupStatus)}${m.warmupStatus === "warming" ? `<small>до ${m.currentWarmupLimit} писем/день</small>` : m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-health="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}">Подпись</button><button data-edit-mailbox="${m.id}">Настройки</button><button data-verify="${m.id}">${m.verified ? "Перепроверить" : "Проверить"}</button></div></td></tr>`,
+                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td><label class="switch" title="Включить или приостановить прогрев"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-warmup-settings="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td><button class="warmup-score" data-warmup-settings="${m.id}" aria-label="${escape(m.email)} прогрет на ${m.warmupProgress.score} процентов"><span class="warmup-score-head"><strong>${m.warmupProgress.score}%</strong><b>${escape(m.warmupProgress.label)}</b></span><span class="progress"><span style="width:${m.warmupProgress.score}%"></span></span><small>${m.warmupStatus === "warming" ? `день ${m.warmupProgress.day} из 14 · ${m.currentWarmupLimit} ${mailWord(m.currentWarmupLimit)}/день` : escape(labels[m.warmupStatus] || m.warmupStatus)}</small>${m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-health="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}">Подпись</button><button data-edit-mailbox="${m.id}">Настройки</button><button data-verify="${m.id}">${m.verified ? "Перепроверить" : "Проверить"}</button></div></td></tr>`,
             )
             .join("")}</tbody></table></div></section>`
         : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'
@@ -622,9 +632,19 @@ function healthDialog(m) {
   );
 }
 
+function warmupProgressBody(m) {
+  const parts = [
+    ["Активные дни", m.warmupProgress.parts.duration, 40],
+    ["Выполнение плана", m.warmupProgress.parts.plan, 25],
+    ["Успешная отправка", m.warmupProgress.parts.sending, 20],
+    ["Получение писем", m.warmupProgress.parts.receiving, 15],
+  ];
+  return `<div class="readiness-total"><strong>${m.warmupProgress.score}%</strong><div><b>${escape(m.warmupProgress.label)}</b><span>День ${m.warmupProgress.day} из ${m.warmupProgress.totalDays} · план на сегодня ${m.warmupProgress.target} ${mailWord(m.warmupProgress.target)}</span></div></div><div class="health-parts">${parts.map(([name, value, max]) => `<div><div class="row spaced"><span>${name}</span><strong>${value}/${max}</strong></div><div class="progress"><span style="width:${Math.round((value / max) * 100)}%"></span></div></div>`).join("")}</div><div class="warmup-scale"><span><b>0–19%</b> Старт</span><span><b>20–39%</b> Набирает историю</span><span><b>40–59%</b> Прогревается</span><span><b>60–79%</b> Хорошая динамика</span><span><b>80–94%</b> Хорошо прогрет</span><span><b>95–100%</b> Высокий прогрев</span></div><p class="hint">Процент растёт только при реальной отправке по автоматическому плану. Пауза останавливает день программы. Оценка не гарантирует доставку будущих кампаний во входящие.</p>`;
+}
+
 function warmupDialog(m) {
   dialog(
-    `<h2>Прогрев · ${escape(m.email)}</h2><div class="warmup-dialog-summary"><div><span>Статус</span>${badge(m.warmupStatus)}</div><div><span>Отправлено</span><strong>${m.warmupStats.sent}</strong></div><div><span>Ответы</span><strong>${m.warmupStats.replies}</strong></div></div>${healthBody(m)}<form id="warmup-settings-form"><div class="grid"><label>Начинать с писем в день<input name="start" type="number" min="1" max="100" value="${m.warmup.start}"></label><label>Увеличивать ежедневно на<input name="increase" type="number" min="1" max="100" value="${m.warmup.increase}"></label><label>Максимум писем в день<input name="max" type="number" min="1" max="100" value="${m.warmup.max}"></label></div><label class="check"><input name="consent" type="checkbox" ${m.warmup.consent ? "checked" : ""}>Владелец разрешил обмен с другими ящиками этой команды</label><label class="check"><input name="enabled" type="checkbox" ${m.warmup.enabled ? "checked" : ""}>Прогрев включён</label><div class="actions"><button class="primary">Сохранить настройки</button></div></form>`,
+    `<h2>Прогрев · ${escape(m.email)}</h2><div class="warmup-dialog-summary"><div><span>Режим</span><strong>Автоматический</strong></div><div><span>Отправлено</span><strong>${m.warmupStats.sent}</strong></div><div><span>Ответы</span><strong>${m.warmupStats.replies}</strong></div></div>${warmupProgressBody(m)}<form id="warmup-settings-form"><label class="check"><input name="enabled" type="checkbox" ${m.warmup.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}>Автоматический прогрев включён</label><p class="hint">Dmailio сам задаёт объём: 2 письма в день на старте и плавный рост до 10 писем к концу двух недель.</p><div class="actions"><button class="primary">Сохранить</button></div></form>`,
   );
   document.querySelector("#warmup-settings-form").onsubmit = action(
     async (e) => {
@@ -641,10 +661,7 @@ function warmupDialog(m) {
         return;
       await api("/mailboxes/" + m.id + "/warmup", {
         enabled,
-        consent: data.has("consent"),
-        start: Number(data.get("start")),
-        increase: Number(data.get("increase")),
-        max: Number(data.get("max")),
+        consent: enabled ? true : m.warmup.consent,
       });
       document.querySelector("dialog").remove();
       await refresh();

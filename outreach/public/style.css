@@ -670,14 +670,16 @@ dialog:has(#signature-form) {
   text-align: center;
 }
 .mailbox-name,
-.status-button {
+.status-button,
+.warmup-score {
   border: 0;
   background: transparent;
   text-align: left;
   padding: 0;
 }
 .mailbox-name:hover,
-.status-button:hover {
+.status-button:hover,
+.warmup-score:hover {
   background: transparent;
   color: var(--accent);
 }
@@ -694,6 +696,32 @@ dialog:has(#signature-form) {
   max-width: 240px;
   color: #ae4049;
   white-space: normal;
+}
+.warmup-score {
+  min-width: 220px;
+}
+.warmup-score-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.warmup-score-head strong {
+  color: var(--accent);
+  font-size: 19px;
+}
+.warmup-score-head b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.warmup-score .progress {
+  margin: 8px 0 0;
+}
+.warmup-score small {
+  display: block;
+  margin-top: 6px;
+  color: #73798b;
+  font-size: 12px;
 }
 .connection-error {
   color: #8b3038;
@@ -827,6 +855,47 @@ dialog:has(#signature-form) {
   font-size: 12px;
   margin-bottom: 8px;
 }
+.readiness-total {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 8px 0 20px;
+  padding: 18px;
+  background: #f7f8ff;
+  border: 1px solid #e3e5ff;
+  border-radius: 12px;
+}
+.readiness-total > strong {
+  color: var(--accent);
+  font-size: 42px;
+}
+.readiness-total b,
+.readiness-total span {
+  display: block;
+}
+.readiness-total span {
+  margin-top: 6px;
+  color: #73798b;
+  font-size: 13px;
+}
+.warmup-scale {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0;
+}
+.warmup-scale span {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #73798b;
+  font-size: 12px;
+}
+.warmup-scale b {
+  display: block;
+  margin-bottom: 4px;
+  color: #252638;
+}
 @media (max-width: 900px) {
   .mailbox-toolbar {
     align-items: stretch;
@@ -841,5 +910,8 @@ dialog:has(#signature-form) {
   .health-parts,
   .warmup-dialog-summary {
     grid-template-columns: 1fr;
+  }
+  .warmup-scale {
+    grid-template-columns: 1fr 1fr;
   }
 }

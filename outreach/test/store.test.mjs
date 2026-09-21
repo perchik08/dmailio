@@ -340,6 +340,10 @@ test("mailbox overview reports warmup status, totals and transparent technical h
   assert.equal(fresh.health.score, 65);
   assert.equal(fresh.health.parts.sending, 0);
   assert.equal(fresh.health.parts.receiving, 0);
+  assert.equal(fresh.warmupProgress.score, 0);
+  assert.equal(fresh.warmupProgress.label, "Старт");
+  assert.equal(fresh.warmupProgress.day, 1);
+  assert.equal(fresh.currentWarmupLimit, 2);
   const outgoing = s.insertMessage(
     {
       mailbox_id: first.id,
@@ -397,6 +401,216 @@ test("mailbox overview reports warmup status, totals and transparent technical h
   s.close();
 });
 
+test("automatic warmup follows a fixed fourteen-day progression", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const started = new Date("2026-09-01T00:00:00Z").getTime();
+  const first = s.saveMailbox(mailbox);
+  const second = s.saveMailbox({
+    ...mailbox,
+    email: "second@example.com",
+    smtp: { ...mailbox.smtp, user: "second@example.com" },
+    imap: { ...mailbox.imap, user: "second@example.com" },
+  });
+  for (const m of [first, second]) {
+    s.markMailbox(m.id, true);
+    s.warmup(m.id, { enabled: true, consent: true }, started);
+  }
+
+  const plan = [2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10];
+  for (let day = 0; day < plan.length; day++) {
+    const row = s
+      .mailboxOverview(started + day * 86400000)
+      .find((m) => m.id === first.id);
+    assert.equal(row.warmupProgress.day, day + 1);
+    assert.equal(row.currentWarmupLimit, plan[day]);
+    const message = s.insertMessage(
+      {
+        mailbox_id: first.id,
+        kind: "warmup",
+        recipient: second.email,
+        subject: `Активный день ${day + 1}`,
+        body: "Тест",
+      },
+      started + day * 86400000,
+    );
+    s.finish(message.id, "sent", started + day * 86400000 + 1);
+  }
+  assert.equal(
+    s.mailboxOverview(started + 30 * 86400000).find((m) => m.id === first.id)
+      .warmupProgress.day,
+    14,
+  );
+  s.close();
+});
+
+test("waiting for a healthy peer does not advance the automatic plan", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const started = new Date("2026-09-01T00:00:00Z").getTime();
+  const m = s.saveMailbox(mailbox);
+  s.markMailbox(m.id, true);
+  s.warmup(m.id, { enabled: true, consent: true }, started);
+
+  const row = s.mailboxOverview(started + 30 * 86400000)[0];
+  assert.equal(row.warmupStatus, "waiting");
+  assert.equal(row.warmupProgress.day, 1);
+  assert.equal(row.currentWarmupLimit, 2);
+  assert.equal(row.warmupProgress.score, 0);
+  s.close();
+});
+
+test("a connection error does not erase earned warmup progress", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const started = new Date("2026-09-01T00:00:00Z").getTime();
+  const m = s.saveMailbox(mailbox);
+  s.markMailbox(m.id, true);
+  s.warmup(m.id, { enabled: true, consent: true }, started);
+  const message = s.insertMessage(
+    {
+      mailbox_id: m.id,
+      kind: "warmup",
+      recipient: "peer@example.com",
+      subject: "Активный день",
+      body: "Тест",
+    },
+    started,
+  );
+  s.finish(message.id, "sent", started + 1);
+  const earned = s.mailboxOverview(started + 3600000)[0].warmupProgress.score;
+  assert.ok(earned > 0);
+
+  s.markMailbox(m.id, false, "Нет подключения");
+  const disconnected = s.mailboxOverview(started + 7200000)[0];
+  assert.equal(disconnected.warmupStatus, "unverified");
+  assert.equal(disconnected.warmupProgress.score, earned);
+  assert.equal(disconnected.health.score, 0);
+  s.close();
+});
+
+test("warmup percentage reaches 100 only after fourteen active planned days", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const started = new Date("2026-09-01T00:00:00Z").getTime();
+  const first = s.saveMailbox(mailbox);
+  const second = s.saveMailbox({
+    ...mailbox,
+    email: "second@example.com",
+    smtp: { ...mailbox.smtp, user: "second@example.com" },
+    imap: { ...mailbox.imap, user: "second@example.com" },
+  });
+  for (const m of [first, second]) {
+    s.markMailbox(m.id, true);
+    s.synced(m.id, { validity: 1 }, started + 14 * 86400000);
+    s.warmup(m.id, { enabled: true, consent: true }, started);
+  }
+  const plan = [2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 10];
+  for (let day = 0; day < plan.length; day++) {
+    let firstMessage;
+    for (let n = 0; n < plan[day]; n++) {
+      const message = s.insertMessage(
+        {
+          mailbox_id: first.id,
+          kind: "warmup",
+          recipient: second.email,
+          subject: `День ${day + 1}`,
+          body: "Тест",
+        },
+        started + day * 86400000 + n * 60000,
+      );
+      s.finish(message.id, "sent", started + day * 86400000 + n * 60000 + 1);
+      firstMessage ||= message;
+    }
+    s.ingest(
+      first.id,
+      {
+        remoteId: `reply-${day}`,
+        messageId: `<reply-${day}@example.com>`,
+        references: [firstMessage.message_id],
+        from: second.email,
+        subject: `Re: День ${day + 1}`,
+        text: "Получено",
+        type: "reply",
+      },
+      started + day * 86400000 + 3600000,
+    );
+  }
+
+  const progress = s
+    .mailboxOverview(started + 14 * 86400000)
+    .find((m) => m.id === first.id).warmupProgress;
+  assert.equal(progress.score, 100);
+  assert.equal(progress.label, "Высокий прогрев");
+  assert.deepEqual(progress.parts, {
+    duration: 40,
+    plan: 25,
+    sending: 20,
+    receiving: 15,
+  });
+  s.close();
+});
+
+test("pausing automatic warmup freezes its program day", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const started = new Date("2026-09-01T00:00:00Z").getTime();
+  const m = s.saveMailbox(mailbox);
+  s.markMailbox(m.id, true);
+  s.warmup(m.id, { enabled: true, consent: true }, started);
+  for (let day = 0; day < 3; day++) {
+    const message = s.insertMessage(
+      {
+        mailbox_id: m.id,
+        kind: "warmup",
+        recipient: "peer@example.com",
+        subject: `День ${day + 1}`,
+        body: "Тест",
+      },
+      started + day * 86400000,
+    );
+    s.finish(message.id, "sent", started + day * 86400000 + 1);
+  }
+  const beforePause = s.mailboxOverview(started + 3 * 86400000)[0];
+  s.warmup(m.id, { enabled: false, consent: true }, started + 3 * 86400000);
+  const paused = s.mailboxOverview(started + 10 * 86400000)[0];
+  assert.equal(paused.warmupProgress.day, 4);
+  assert.equal(paused.warmupProgress.score, beforePause.warmupProgress.score);
+  s.warmup(m.id, { enabled: true, consent: true }, started + 10 * 86400000);
+  assert.equal(
+    s.mailboxOverview(started + 11 * 86400000)[0].warmupProgress.day,
+    4,
+  );
+  assert.equal(
+    s.mailboxOverview(started + 11 * 86400000)[0].warmup.since,
+    started,
+  );
+  s.close();
+});
+
+test("legacy paused warmup keeps its history boundary and resumes at the real active day", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const started = new Date("2026-08-01T00:00:00Z").getTime();
+  const resumed = new Date("2026-09-01T00:00:00Z").getTime();
+  const m = s.saveMailbox(mailbox);
+  s.markMailbox(m.id, true);
+  const row = s.db.prepare("SELECT config FROM mailboxes WHERE id=?").get(m.id);
+  const config = JSON.parse(row.config);
+  config.warmup = {
+    enabled: false,
+    consent: true,
+    start: 2,
+    increase: 1,
+    max: 10,
+    since: started,
+  };
+  s.db
+    .prepare("UPDATE mailboxes SET config=? WHERE id=?")
+    .run(JSON.stringify(config), m.id);
+
+  assert.equal(s.mailboxOverview(resumed)[0].warmupProgress.day, 1);
+  s.warmup(m.id, { enabled: true, consent: true }, resumed);
+  const after = s.mailboxOverview(resumed + 86400000)[0];
+  assert.equal(after.warmup.since, started);
+  assert.equal(after.warmupProgress.day, 1);
+  s.close();
+});
+
 test("mailbox overview upgrades legacy configs without warmup settings", () => {
   const s = new module.Store(":memory:", "a".repeat(64));
   const m = s.saveMailbox(mailbox);
@@ -416,6 +630,8 @@ test("mailbox overview upgrades legacy configs without warmup settings", () => {
     increase: 1,
     max: 10,
     since: 0,
+    pausedAt: 0,
+    mode: "automatic-v1",
   });
   s.close();
 });
