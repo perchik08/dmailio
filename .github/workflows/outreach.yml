@@ -1,0 +1,25 @@
+name: Outreach checks
+on:
+  push:
+    paths: ['outreach/**', '.github/workflows/outreach.yml']
+  pull_request:
+    paths: ['outreach/**', '.github/workflows/outreach.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: outreach
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: outreach/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run format:check
+      - run: docker build -t dmailio-outreach:test .

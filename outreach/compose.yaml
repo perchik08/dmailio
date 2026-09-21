@@ -1,0 +1,19 @@
+services:
+  outreach:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 9100
+      DMAILIO_DATA: /app/data
+    ports:
+      - "127.0.0.1:9100:9100"
+    volumes:
+      - outreach-data:/app/data
+    init: true
+    stop_grace_period: 90s
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  outreach-data:
