@@ -86,7 +86,7 @@ export function inferSteps(headers) {
       delay: i ? 3 : 0,
     }));
 }
-export function render(template, fields = {}, sender = {}) {
+export function render(template, fields = {}, sender = {}, used = new Set()) {
   const variables = {
     ...fields,
     "Имя Отправителя": sender.name,
@@ -111,6 +111,7 @@ export function render(template, fields = {}, sender = {}) {
           String(variables[key]).trim() !== "",
         `Не заполнена переменная: ${key}`,
       );
+      used.add(key);
       return expand(variables[key], [...stack, key]);
     });
   };

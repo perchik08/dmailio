@@ -1,3 +1,4 @@
+import { mountEditor } from "/editor.js";
 const root = document.querySelector("#app");
 const escape = (s) =>
   String(s ?? "").replace(
@@ -145,7 +146,15 @@ function campaigns() {
       name: "Новая кампания",
       status: "draft",
       mailboxIds: [],
-      steps: [{ subject: "", body: "", delay: 0 }],
+      steps: [
+        {
+          subject: "",
+          body: "",
+          delay: 0,
+          format: "markdown",
+          includeSignature: true,
+        },
+      ],
       schedule: {
         days: [1, 2, 3, 4, 5],
         start: "09:00",
@@ -284,7 +293,12 @@ function renderCampaign() {
           return;
         }
         importCSV = csv;
-        if (parsed.steps.length) current.steps = parsed.steps;
+        if (parsed.steps.length)
+          current.steps = parsed.steps.map((s) => ({
+            ...s,
+            format: "markdown",
+            includeSignature: true,
+          }));
         stepIndex = 0;
         renderCampaign();
       }),
@@ -301,7 +315,25 @@ function renderCampaign() {
         "Подпись Отправителя",
       ]),
     ];
-    box.innerHTML = `<div class="steps"><aside>${current.steps.map((s, i) => `<div class="step ${i === stepIndex ? "selected" : ""}"><button data-step="${i}">Письмо ${i + 1}</button><small>${i ? "Через " + s.delay + " дн." : "Начало цепочки"}</small><p>${escape(s.subject || "Тема предыдущего письма")}</p></div>`).join("")}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label>Задержка после предыдущего письма, дней<input id="delay" type="number" min="0" max="365" value="${s.delay}" ${stepIndex ? "" : "disabled"}></label><label>Текст письма<textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea></label><p class="hint">Переменные подставляются из строки получателя. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
+    box.innerHTML = `<div class="steps"><aside>${current.steps.map((s, i) => `<div class="step ${i === stepIndex ? "selected" : ""}"><button data-step="${i}">Письмо ${i + 1}</button><small>${i ? "Через " + s.delay + " дн." : "Начало цепочки"}</small><p>${escape(s.subject || "Тема предыдущего письма")}</p></div>`).join("")}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label>Задержка после предыдущего письма, дней<input id="delay" type="number" min="0" max="365" value="${s.delay}" ${stepIndex ? "" : "disabled"}></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
+    mountEditor(document.querySelector("#body"), {
+      api,
+      notify: notice,
+      format: s.format || "plain",
+      disabled: !editable,
+      onFormat: (value) => {
+        s.format = value;
+      },
+      signature: true,
+      includeSignature: s.includeSignature !== false,
+      onSignature: (value) => {
+        s.includeSignature = value;
+      },
+      previewPayload: () => ({
+        mailboxId: current.mailboxIds[0],
+        includeSignature: s.includeSignature !== false,
+      }),
+    });
     document.querySelectorAll("[data-step]").forEach(
       (b) =>
         (b.onclick = () => {
@@ -320,13 +352,20 @@ function renderCampaign() {
             area.selectionEnd,
             "end",
           );
+          area.dispatchEvent(new Event("input", { bubbles: true }));
           area.focus();
         }),
     );
     click("add-step", () => {
       readEditor();
       if (current.steps.length >= 20) throw new Error("Максимум 20 шагов");
-      current.steps.push({ subject: "", body: "", delay: 3 });
+      current.steps.push({
+        subject: "",
+        body: "",
+        delay: 3,
+        format: "markdown",
+        includeSignature: true,
+      });
       stepIndex = current.steps.length - 1;
       renderCampaign();
     });
@@ -371,8 +410,12 @@ async function preview() {
       mailboxId: document.querySelector("#preview-sender").value,
       step: stepIndex,
     });
-    document.querySelector("#preview-text").textContent =
-      "Тема: " + p.subject + "\n\n" + p.text;
+    document.querySelector("#preview-text").innerHTML =
+      "<h3>" +
+      escape(p.subject) +
+      '</h3><div class="mail-preview">' +
+      p.html +
+      "</div>";
   });
   document.querySelector("#preview-update").click();
 }
@@ -387,9 +430,18 @@ function dialog(content) {
 }
 function mailboxes() {
   shell(
-    `<div class="top"><div><h1>Почты</h1><p class="hint">Отправка, приём ответов и лимиты каждого ящика</p></div><button id="add-mailbox" class="primary">+ Подключить почту</button></div>${state.mailboxes.length ? `<div class="panel table-scroll"><table><tr><th>Ящик</th><th>Подключение</th><th>Лимит / 24 ч.</th><th>Синхронизация</th><th></th></tr>${state.mailboxes.map((m) => `<tr><td><strong>${escape(m.email)}</strong><p class="hint">${escape(m.name)} ${escape(m.surname)}</p></td><td>${badge(m.verified ? "connected" : "unverified")}<p class="hint">${escape(m.error)}</p></td><td>${m.limit}</td><td>${date(m.lastSync)}</td><td><button data-edit-mailbox="${m.id}">Настройки</button> <button data-verify="${m.id}">Проверить</button></td></tr>`).join("")}</table></div>` : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'}`,
+    `<div class="top"><div><h1>Почты</h1><p class="hint">Отправка, приём ответов и лимиты каждого ящика</p></div><button id="add-mailbox" class="primary">+ Подключить почту</button></div>${state.mailboxes.length ? `<div class="panel table-scroll"><table><tr><th>Ящик</th><th>Подключение</th><th>Лимит / 24 ч.</th><th>Синхронизация</th><th></th></tr>${state.mailboxes.map((m) => `<tr><td><strong>${escape(m.email)}</strong><p class="hint">${escape(m.name)} ${escape(m.surname)}</p></td><td>${badge(m.verified ? "connected" : "unverified")}<p class="hint">${escape(m.error)}</p></td><td>${m.limit}</td><td>${date(m.lastSync)}</td><td><button data-signature-mailbox="${m.id}">Подпись</button> <button data-edit-mailbox="${m.id}">Настройки</button> <button data-verify="${m.id}">Проверить</button></td></tr>`).join("")}</table></div>` : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'}`,
   );
   click("add-mailbox", () => mailboxDialog());
+  document
+    .querySelectorAll("[data-signature-mailbox]")
+    .forEach(
+      (b) =>
+        (b.onclick = () =>
+          signatureDialog(
+            state.mailboxes.find((m) => m.id === b.dataset.signatureMailbox),
+          )),
+    );
   document
     .querySelectorAll("[data-edit-mailbox]")
     .forEach(
@@ -413,6 +465,40 @@ function mailboxes() {
       })),
   );
 }
+function signatureDialog(m) {
+  let format = m.signatureFormat || (m.signature ? "plain" : "markdown");
+  dialog(
+    `<h2>Подпись · ${escape(m.email)}</h2><p class="hint">Добавляется в кампании и ответы от этого ящика. Внутри письма её можно отключить.</p><form id="signature-form"><label for="signature-body">Текст подписи</label><textarea id="signature-body" maxlength="20000" placeholder="С уважением,&#10;Ваше имя&#10;Контакты и ссылки">${escape(m.signature)}</textarea><label class="check"><input id="signature-enabled" type="checkbox" ${m.signatureEnabled !== false ? "checked" : ""}>Автоматически добавлять подпись</label><div class="actions"><button type="button" id="signature-example">Вставить пример</button><button class="primary">Сохранить подпись</button></div></form>`,
+  );
+  const area = document.querySelector("#signature-body");
+  mountEditor(area, {
+    api,
+    notify: notice,
+    format,
+    onFormat: (value) => {
+      format = value;
+    },
+  });
+  click("signature-example", () => {
+    if (area.value.trim() && !confirm("Заменить подпись примером?")) return;
+    area.value = `С уважением,\n**${[m.name, m.surname].filter(Boolean).join(" ") || "Ваше имя"}**\n\n[${m.email}](mailto:${m.email}) · [Telegram](https://t.me/username)\n[Сайт](https://example.com)`;
+    const select = area.parentElement.querySelector("[data-format]");
+    select.value = "markdown";
+    select.dispatchEvent(new Event("change"));
+    area.dispatchEvent(new Event("input"));
+  });
+  document.querySelector("#signature-form").onsubmit = action(async (e) => {
+    e.preventDefault();
+    await api("/mailboxes/" + m.id + "/signature", {
+      body: area.value,
+      format,
+      enabled: document.querySelector("#signature-enabled").checked,
+    });
+    document.querySelector("dialog").remove();
+    await refresh();
+    notice("Подпись сохранена. Подключение почты не изменилось.");
+  });
+}
 function mailboxDialog(
   m = {
     email: "",
@@ -425,7 +511,7 @@ function mailboxDialog(
   },
 ) {
   dialog(
-    `<h2>${m.id ? "Настройки ящика" : "Подключить почту"}</h2><form id="mailbox-form"><label>Провайдер<select id="provider"><option value="custom">Другой / IMAP + SMTP</option value="yandex">Яндекс 360</option><option value="google">Google Workspace</option><option value="vk">VK Workspace</option></select></label><div class="grid"><label>Email<input name="email" type="email" required value="${escape(m.email)}"></label><label>Лимит за 24 часа<input name="limit" type="number" min="1" max="10000" value="${m.limit}" required></label><label>Имя<input name="name" value="${escape(m.name)}"></label><label>Фамилия<input name="surname" value="${escape(m.surname)}"></label></div><label>Подпись<textarea name="signature">${escape(m.signature)}</textarea></label>${["smtp", "imap"].map((t) => `<h3>${t.toUpperCase()}</h3><div class="grid"><label>Сервер<input name="${t}Host" required value="${escape(m[t].host)}"></label><label>Порт<input name="${t}Port" type="number" required value="${m[t].port}"></label><label>Логин<input name="${t}User" value="${escape(m[t].user)}" placeholder="По умолчанию email"></label><label>Пароль приложения<input name="${t}Password" type="password" autocomplete="new-password" ${m.id ? "" : "required"} placeholder="${m.id ? "Пусто — сохранить текущий" : ""}"></label></div><label class="check"><input name="${t}Secure" type="checkbox" ${m[t].secure ? "checked" : ""}>TLS сразу при подключении (без галочки — обязательный STARTTLS)</label>`).join("")}<p class="hint">Пресет заполняет серверы. Пароль приложения и доступ IMAP нужно включить у провайдера. OAuth пока не поддерживается.</p><div class="actions"><button class="primary">Сохранить подключение</button></div></form>`,
+    `<h2>${m.id ? "Настройки ящика" : "Подключить почту"}</h2><form id="mailbox-form"><label>Провайдер<select id="provider"><option value="custom">Другой / IMAP + SMTP</option value="yandex">Яндекс 360</option><option value="google">Google Workspace</option><option value="vk">VK Workspace</option></select></label><div class="grid"><label>Email<input name="email" type="email" required value="${escape(m.email)}"></label><label>Лимит за 24 часа<input name="limit" type="number" min="1" max="10000" value="${m.limit}" required></label><label>Имя<input name="name" value="${escape(m.name)}"></label><label>Фамилия<input name="surname" value="${escape(m.surname)}"></label></div><p class="hint">Оформление подписи доступно отдельно: «Почты → Подпись».</p>${["smtp", "imap"].map((t) => `<h3>${t.toUpperCase()}</h3><div class="grid"><label>Сервер<input name="${t}Host" required value="${escape(m[t].host)}"></label><label>Порт<input name="${t}Port" type="number" required value="${m[t].port}"></label><label>Логин<input name="${t}User" value="${escape(m[t].user)}" placeholder="По умолчанию email"></label><label>Пароль приложения<input name="${t}Password" type="password" autocomplete="new-password" ${m.id ? "" : "required"} placeholder="${m.id ? "Пусто — сохранить текущий" : ""}"></label></div><label class="check"><input name="${t}Secure" type="checkbox" ${m[t].secure ? "checked" : ""}>TLS сразу при подключении (без галочки — обязательный STARTTLS)</label>`).join("")}<p class="hint">Пресет заполняет серверы. Пароль приложения и доступ IMAP нужно включить у провайдера. OAuth пока не поддерживается.</p><div class="actions"><button class="primary">Сохранить подключение</button></div></form>`,
   );
   document.querySelector("#provider").onchange = (e) => {
     const presets = {
@@ -449,7 +535,6 @@ function mailboxDialog(
       email: f.get("email"),
       name: f.get("name"),
       surname: f.get("surname"),
-      signature: f.get("signature"),
       limit: Number(f.get("limit")),
     };
     for (const t of ["smtp", "imap"])
@@ -535,7 +620,25 @@ async function showThread(t) {
         )
         .map(([id, name]) => ({ id, name })),
       t.label,
-    )}</select></div>${messages.map((m) => `<article class="message ${m.direction}"><div class="row spaced"><strong>${escape(m.direction === "in" ? m.recipient : m.sender)}</strong><span class="hint">${date(m.created)} · ${escape(labels[m.kind] || m.kind)}</span></div><h3>${escape(m.subject)}</h3><pre>${escape(m.body)}</pre>${badge(m.status)}</article>`).join("")}<form id="reply" class="panel"><h2>Ответить</h2><label>Текст ответа<textarea name="body" required></textarea></label><div class="actions"><button class="primary">Отправить ответ</button></div></form>`;
+    )}</select></div>${messages.map((m) => `<article class="message ${m.direction}"><div class="row spaced"><strong>${escape(m.direction === "in" ? m.recipient : m.sender)}</strong><span class="hint">${date(m.created)} · ${escape(labels[m.kind] || m.kind)}</span></div><h3>${escape(m.subject)}</h3><div class="mail-preview">${m.html}</div>${badge(m.status)}</article>`).join("")}<form id="reply" class="panel"><h2>Ответить</h2><label for="reply-body">Текст ответа</label><textarea id="reply-body" name="body" required></textarea><div class="actions"><button class="primary">Отправить ответ</button></div></form>`;
+  let replyFormat = "markdown",
+    replySignature = true;
+  mountEditor(document.querySelector("#reply-body"), {
+    api,
+    notify: notice,
+    format: replyFormat,
+    onFormat: (value) => {
+      replyFormat = value;
+    },
+    signature: true,
+    onSignature: (value) => {
+      replySignature = value;
+    },
+    previewPayload: () => ({
+      mailboxId: messages[0]?.mailbox_id,
+      includeSignature: replySignature,
+    }),
+  });
   document.querySelector("#thread-label").onchange = action(async (e) => {
     await api("/threads/" + t.id + "/label", { status: e.target.value });
     notice("Статус обновлён");
@@ -545,6 +648,8 @@ async function showThread(t) {
     if (!confirm("Отправить этот ответ адресату " + t.email + "?")) return;
     const result = await api("/threads/" + t.id + "/reply", {
       body: new FormData(e.target).get("body"),
+      format: replyFormat,
+      includeSignature: replySignature,
     });
     notice(result.status === "sent" ? "Ответ отправлен" : result.error);
     await showThread(t);

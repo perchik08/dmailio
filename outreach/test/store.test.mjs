@@ -5,6 +5,66 @@ import { defaultSchedule } from "../core.mjs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+test("legacy database migration preserves messages and adds plain defaults idempotently", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dmailio-migrate-"));
+  let s;
+  try {
+    s = new module.Store(join(dir, "old.sqlite"), "a".repeat(64));
+    const m = s.saveMailbox(mailbox);
+    const msg = s.insertMessage(
+      {
+        mailbox_id: m.id,
+        kind: "manual",
+        recipient: "a@example.com",
+        subject: "Old",
+        body: "**literal**",
+      },
+      Date.now(),
+    );
+    for (const column of [
+      "format",
+      "signature",
+      "signature_format",
+      "signature_marker",
+    ])
+      s.db.exec(`ALTER TABLE messages DROP COLUMN ${column}`);
+    s.close();
+    s = new module.Store(join(dir, "old.sqlite"), "a".repeat(64));
+    assert.equal(s.message(msg.id).body, "**literal**");
+    assert.equal(s.message(msg.id).format, "plain");
+    assert.equal(s.message(msg.id).signature, "");
+    s.close();
+    s = new module.Store(join(dir, "old.sqlite"), "a".repeat(64));
+    assert.equal(s.message(msg.id).format, "plain");
+  } finally {
+    s?.close();
+    rmSync(dir, { recursive: true });
+  }
+});
+test("manual reply snapshots Markdown signature and supports disabling it", () => {
+  const { s, m } = setup(),
+    now = new Date("2026-09-21T12:00:00Z").getTime();
+  const first = s.reserve(now, new Set([m.id]));
+  s.finish(first.id, "sent", now);
+  s.saveSignature(m.id, {
+    body: "**Иван**",
+    format: "markdown",
+    enabled: true,
+  });
+  const reply = s.reserveReply(first.lead_id, "**Ответ**", now + 120000, {
+    format: "markdown",
+  });
+  assert.equal(reply.format, "markdown");
+  assert.equal(reply.signature, "**Иван**");
+  assert.match(s.rendered(reply).html, /<strong>Ответ<\/strong>/);
+  s.finish(reply.id, "failed", now + 120000);
+  const noSignature = s.reserveReply(first.lead_id, "Hello", now + 240000, {
+    format: "markdown",
+    includeSignature: false,
+  });
+  assert.equal(noSignature.signature, "");
+  s.close();
+});
 const mailbox = {
   email: "sender@example.com",
   name: "Даниил",
@@ -50,6 +110,55 @@ function setup() {
   s.setCampaignStatus(c.id, "active");
   return { s, m, c };
 }
+test("signature editing preserves verification and snapshots formatted signature for queued mail", () => {
+  const { s, m, c } = setup();
+  s.saveSignature(m.id, {
+    body: "С уважением, **{{Имя Отправителя}}**",
+    format: "markdown",
+    enabled: true,
+  });
+  assert.equal(s.mailbox(m.id).verified, true);
+  const msg = s.reserve(
+    new Date("2026-09-21T12:00:00Z").getTime(),
+    new Set([m.id]),
+  );
+  assert.equal(msg.signature, "С уважением, **Даниил**");
+  assert.equal(msg.signature_format, "markdown");
+  s.saveSignature(m.id, {
+    body: "Новая подпись",
+    format: "plain",
+    enabled: true,
+  });
+  assert.equal(s.message(msg.id).signature, "С уважением, **Даниил**");
+  s.close();
+});
+test("signature inside a nested CSV field is not appended twice", () => {
+  const { s, m, c } = setup();
+  s.saveSignature(m.id, { body: "Подпись", format: "markdown", enabled: true });
+  const cfg = s.campaign(c.id);
+  cfg.steps[0].body = "{{Письмо 1}}";
+  const lead = {
+    email: "lead@example.com",
+    fields: { "Письмо 1": "Привет {{Подпись Отправителя}}" },
+  };
+  const p = s.compose(cfg, lead, s.mailbox(m.id), 0);
+  assert.equal(p.text, "Привет Подпись");
+  assert.equal(p.plainText, "Привет Подпись");
+  assert.equal(p.html.match(/Подпись/g).length, 1);
+  s.close();
+});
+test("connection settings cannot erase separately saved signature", () => {
+  const { s, m } = setup();
+  s.saveSignature(m.id, {
+    body: "**Подпись**",
+    format: "markdown",
+    enabled: false,
+  });
+  s.saveMailbox({ ...mailbox, id: m.id });
+  assert.equal(s.mailbox(m.id).signature, "**Подпись**");
+  assert.equal(s.mailbox(m.id).signatureEnabled, false);
+  s.close();
+});
 test("encrypted secrets never appear in mailbox API and stored ciphertext", () => {
   const { s, m } = setup();
   assert.equal(JSON.stringify(s.mailboxes()).includes("smtp-secret"), false);

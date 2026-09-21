@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { escapeHTML } from "./core.mjs";
+import { renderContent } from "./content.mjs";
 
 export function classify(parsed) {
   const ct = String(
@@ -83,10 +84,19 @@ export class MailGateway {
   }
   async send(m, message) {
     const unsubscribe = `${this.publicURL}/unsubscribe/${message.token}`;
+    const formatted = renderContent(
+      message,
+      (id) => this.store.image(id),
+      true,
+    );
     const text =
-      message.body +
+      formatted.text +
       (message.kind === "campaign" ? `\n\nОтписаться: ${unsubscribe}` : "");
-    let html = `<div style="white-space:pre-wrap">${escapeHTML(text)}</div>`;
+    let html =
+      formatted.html +
+      (message.kind === "campaign"
+        ? `<p><a href="${escapeHTML(unsubscribe)}">Отписаться</a></p>`
+        : "");
     if (
       message.kind === "campaign" &&
       this.store.campaign(message.campaign_id).trackOpens
@@ -103,6 +113,7 @@ export class MailGateway {
         subject: message.subject,
         text,
         html,
+        attachments: formatted.attachments,
         messageId: message.message_id,
         inReplyTo: message.parent || undefined,
         references: message.parent ? [message.parent] : undefined,

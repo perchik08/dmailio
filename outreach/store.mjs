@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { contentFormat, renderContent, validateImage } from "./content.mjs";
 import {
   randomUUID,
   randomBytes,
@@ -35,7 +36,25 @@ export class Store {
       CREATE TABLE IF NOT EXISTS thread_status(lead_id TEXT PRIMARY KEY REFERENCES leads(id),status TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,message_id TEXT NOT NULL REFERENCES messages(id),kind TEXT NOT NULL,created INTEGER NOT NULL, UNIQUE(message_id,kind));
       CREATE TABLE IF NOT EXISTS runtime_lock(id INTEGER PRIMARY KEY,owner TEXT,expires INTEGER);
+      CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY,mime TEXT NOT NULL,data BLOB NOT NULL,created INTEGER NOT NULL);
     `);
+    // Additive migration: existing messages remain plain text without a signature.
+    const columns = new Set(
+      this.db
+        .prepare("PRAGMA table_info(messages)")
+        .all()
+        .map((c) => c.name),
+    );
+    for (const [name, value] of [
+      ["format", "plain"],
+      ["signature", ""],
+      ["signature_format", "plain"],
+      ["signature_marker", ""],
+    ])
+      if (!columns.has(name))
+        this.db.exec(
+          `ALTER TABLE messages ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`,
+        );
   }
   close() {
     this.db.close();
@@ -79,7 +98,10 @@ export class Store {
       email: address,
       name: String(input.name || "").slice(0, 100),
       surname: String(input.surname || "").slice(0, 100),
-      signature: String(input.signature || "").slice(0, 4000),
+      signature:
+        old?.signature ?? String(input.signature || "").slice(0, 20000),
+      signatureFormat: old?.signatureFormat || "plain",
+      signatureEnabled: old?.signatureEnabled !== false,
       limit: input.limit,
       enabled: input.enabled !== false,
       warmup: old?.warmup || {
@@ -150,6 +172,47 @@ export class Store {
       .all()
       .map((r) => this.mailbox(r.id));
   }
+  saveSignature(id, input) {
+    requireValue(
+      typeof input.body === "string" && input.body.length <= 20000,
+      "Подпись: максимум 20 000 символов",
+    );
+    const format = contentFormat(input.format);
+    renderContent({ body: input.body, format }, (id) => this.image(id));
+    const row = this.db
+      .prepare("SELECT config FROM mailboxes WHERE id=?")
+      .get(id);
+    requireValue(row, "Ящик не найден");
+    const cfg = JSON.parse(row.config);
+    cfg.signature = input.body;
+    cfg.signatureFormat = format;
+    cfg.signatureEnabled = input.enabled !== false;
+    this.db
+      .prepare("UPDATE mailboxes SET config=? WHERE id=?")
+      .run(json(cfg), id);
+    return this.mailbox(id);
+  }
+  saveImage(data, mime) {
+    validateImage(data, mime);
+    const total = this.db
+      .prepare("SELECT coalesce(sum(length(data)),0) size FROM images")
+      .get().size;
+    requireValue(
+      total + data.length <= 100_000_000,
+      "Хранилище картинок заполнено (100 МБ)",
+    );
+    const id = randomBytes(16).toString("hex");
+    this.db
+      .prepare("INSERT INTO images VALUES(?,?,?,?)")
+      .run(id, mime, data, Date.now());
+    return { id, url: `/api/images/${id}` };
+  }
+  image(id) {
+    return this.db.prepare("SELECT mime,data FROM images WHERE id=?").get(id);
+  }
+  rendered(message, forEmail = false) {
+    return renderContent(message, (id) => this.image(id), forEmail);
+  }
   markMailbox(id, ok, error = "") {
     this.db
       .prepare("UPDATE mailboxes SET verified=?,error=? WHERE id=?")
@@ -202,7 +265,13 @@ export class Store {
         "Задержка: 0–365 дней",
       );
       requireValue(i > 0 || s.subject.trim(), "Нужна тема первого письма");
-      return { subject: s.subject, body: s.body, delay: i ? s.delay : 0 };
+      return {
+        subject: s.subject,
+        body: s.body,
+        delay: i ? s.delay : 0,
+        format: contentFormat(s.format),
+        includeSignature: s.includeSignature !== false,
+      };
     });
     requireValue(Array.isArray(input.mailboxIds), "Выберите ящики");
     const mailboxIds = [...new Set(input.mailboxIds)];
@@ -285,9 +354,44 @@ export class Store {
       !/[\r\n]/.test(subject) && subject.length <= 998,
       "Тема после подстановки некорректна",
     );
+    const used = new Set();
+    const text = render(c.steps[step].body, l.fields, m, used);
+    const signature =
+      c.steps[step].includeSignature !== false &&
+      m.signatureEnabled !== false &&
+      !used.has("Подпись Отправителя")
+        ? render(m.signature || "", l.fields, m)
+        : "";
+    const content = {
+      body: text,
+      format: contentFormat(c.steps[step].format),
+      signature,
+      signature_format: m.signatureFormat || "plain",
+    };
+    // Preserve a rich signature inserted into a legacy plain-text CSV template.
+    if (
+      content.format === "plain" &&
+      m.signatureFormat === "markdown" &&
+      used.has("Подпись Отправителя")
+    ) {
+      content.signature_marker = randomUUID();
+      content.signature = render(m.signature || "", l.fields, m);
+      content.body = render(c.steps[step].body, l.fields, {
+        ...m,
+        signature: content.signature_marker,
+      });
+    }
+    const formatted = this.rendered(content);
     return {
       subject,
-      text: render(c.steps[step].body, l.fields, m),
+      text,
+      body: content.body,
+      signature_marker: content.signature_marker || "",
+      format: content.format,
+      signature: content.signature,
+      signature_format: content.signature_format,
+      html: formatted.html,
+      plainText: formatted.text,
       to: l.email,
       from: m.email,
     };
@@ -389,7 +493,11 @@ export class Store {
             kind: "campaign",
             recipient: l.email,
             subject: p.subject,
-            body: p.text,
+            body: p.body,
+            signature_marker: p.signature_marker,
+            format: p.format,
+            signature: p.signature,
+            signature_format: p.signature_format,
             parent: previous?.message_id,
           },
           now,
@@ -415,7 +523,7 @@ export class Store {
     const messageId = `<${id}@${m.email.split("@")[1]}>`;
     this.db
       .prepare(
-        `INSERT INTO messages(id,message_id,mailbox_id,campaign_id,lead_id,step,kind,direction,status,recipient,subject,body,parent,created,token) VALUES(?,?,?,?,?,?,?,'out','sending',?,?,?,?,?,?)`,
+        `INSERT INTO messages(id,message_id,mailbox_id,campaign_id,lead_id,step,kind,direction,status,recipient,subject,body,parent,created,token,format,signature,signature_format,signature_marker) VALUES(?,?,?,?,?,?,?,'out','sending',?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         id,
@@ -431,6 +539,10 @@ export class Store {
         v.parent || null,
         now,
         randomBytes(24).toString("hex"),
+        v.format || "plain",
+        v.signature || "",
+        v.signature_format || "plain",
+        v.signature_marker || "",
       );
     return this.message(id);
   }
@@ -683,7 +795,7 @@ export class Store {
       )
       .run(id, status);
   }
-  reserveReply(leadId, body, now = Date.now()) {
+  reserveReply(leadId, body, now = Date.now(), options = {}) {
     requireValue(
       typeof body === "string" && body.trim() && body.length <= 100000,
       "Введите ответ",
@@ -707,6 +819,17 @@ export class Store {
         )
         .get(leadId);
       requireValue(prev, "Нет переписки");
+      const m = this.mailbox(l.mailbox_id);
+      const content = {
+        body,
+        format: contentFormat(options.format),
+        signature:
+          options.includeSignature !== false && m.signatureEnabled !== false
+            ? render(m.signature || "", JSON.parse(l.fields), m)
+            : "",
+        signature_format: m.signatureFormat || "plain",
+      };
+      this.rendered(content);
       return this.insertMessage(
         {
           mailbox_id: l.mailbox_id,
@@ -717,7 +840,7 @@ export class Store {
           subject: /^re:/i.test(prev.subject)
             ? prev.subject
             : `Re: ${prev.subject}`,
-          body,
+          ...content,
           parent: prev.message_id,
         },
         now,

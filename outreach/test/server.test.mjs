@@ -32,6 +32,34 @@ test("API requires login, same-origin writes and excludes credentials", async ()
     });
     assert.equal(login.status, 200);
     const cookie = login.headers.get("set-cookie").split(";")[0];
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
+    const upload = await fetch(base + "/api/images", {
+      method: "POST",
+      headers: { cookie, origin: "http://localhost:9100" },
+      body: JSON.stringify({ base64: png, mime: "image/png" }),
+    });
+    assert.equal(upload.status, 201);
+    const asset = await upload.json();
+    assert.equal((await fetch(base + asset.url)).status, 401);
+    const image = await fetch(base + asset.url, { headers: { cookie } });
+    assert.equal(image.headers.get("content-type"), "image/png");
+    assert.deepEqual(
+      Buffer.from(await image.arrayBuffer()),
+      Buffer.from(png, "base64"),
+    );
+    const preview = await fetch(base + "/api/content/preview", {
+      method: "POST",
+      headers: { cookie, origin: "http://localhost:9100" },
+      body: JSON.stringify({
+        body: `**Hello**\n![Logo](${asset.url})<script>evil()</script>`,
+        format: "markdown",
+      }),
+    });
+    assert.equal(preview.status, 200);
+    const formatted = await preview.json();
+    assert.match(formatted.html, /<strong>Hello<\/strong>/);
+    assert.doesNotMatch(formatted.html, /script|evil/);
     const response = await fetch(base + "/api/mailboxes", {
       headers: { cookie },
     });

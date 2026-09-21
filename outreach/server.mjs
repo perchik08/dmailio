@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { Store } from "./store.mjs";
 import { MailGateway } from "./mail.mjs";
 import { Worker } from "./worker.mjs";
-import { parseContacts, requireValue } from "./core.mjs";
+import { parseContacts, requireValue, render } from "./core.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
@@ -27,7 +27,7 @@ export function createApp({ store, password, publicURL, gateway, worker }) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "default-src 'self'; img-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
     const send = (
       data,
@@ -145,10 +145,48 @@ export function createApp({ store, password, publicURL, gateway, worker }) {
         return send(store.mailboxes());
       if (path === "/api/mailboxes" && method === "POST")
         return send(store.saveMailbox(data), 201);
+      if (path === "/api/images" && method === "POST") {
+        requireValue(
+          typeof data.base64 === "string" &&
+            data.base64.length <= 2_700_000 &&
+            /^[A-Za-z0-9+/]*={0,2}$/.test(data.base64),
+          "Некорректная картинка или превышен размер 2 МБ",
+        );
+        return send(
+          store.saveImage(Buffer.from(data.base64, "base64"), data.mime),
+          201,
+        );
+      }
+      const image = path.match(/^\/api\/images\/([a-f0-9]{32})$/);
+      if (image && method === "GET") {
+        const asset = store.image(image[1]);
+        if (!asset) return send({ error: "Картинка не найдена" }, 404);
+        return send(Buffer.from(asset.data), 200, asset.mime);
+      }
+      if (path === "/api/content/preview" && method === "POST") {
+        requireValue(typeof data.body === "string", "Введите текст");
+        let signature = "",
+          signature_format = "plain";
+        if (data.mailboxId && data.includeSignature !== false) {
+          const m = store.mailbox(data.mailboxId);
+          if (m.signatureEnabled !== false)
+            signature = render(m.signature || "", {}, m);
+          signature_format = m.signatureFormat || "plain";
+        }
+        const formatted = store.rendered({
+          body: data.body,
+          format: data.format,
+          signature,
+          signature_format,
+        });
+        return send({ html: formatted.html, text: formatted.text });
+      }
       const mailbox = path.match(
-        /^\/api\/mailboxes\/([^/]+)\/(verify|warmup)$/,
+        /^\/api\/mailboxes\/([^/]+)\/(verify|warmup|signature)$/,
       );
       if (mailbox && method === "POST") {
+        if (mailbox[2] === "signature")
+          return send(store.saveSignature(mailbox[1], data));
         if (mailbox[2] === "warmup")
           return send(store.warmup(mailbox[1], data));
         try {
@@ -215,13 +253,18 @@ export function createApp({ store, password, publicURL, gateway, worker }) {
       );
       if (thread) {
         const [, id, action] = thread;
-        if (method === "GET" && !action) return send(store.thread(id));
+        if (method === "GET" && !action)
+          return send(
+            store
+              .thread(id)
+              .map((m) => ({ ...m, html: store.rendered(m).html })),
+          );
         if (method === "POST" && action === "label") {
           store.label(id, data.status);
           return send({ ok: true });
         }
         if (method === "POST" && action === "reply") {
-          const msg = store.reserveReply(id, data.body);
+          const msg = store.reserveReply(id, data.body, Date.now(), data);
           return send(await worker.deliver(msg));
         }
       }
@@ -234,7 +277,10 @@ export function createApp({ store, password, publicURL, gateway, worker }) {
       }
       if (path.startsWith("/api/"))
         return send({ error: "Метод не найден" }, 404);
-      if (method === "GET" && ["/", "/app.js", "/style.css"].includes(path)) {
+      if (
+        method === "GET" &&
+        ["/", "/app.js", "/editor.js", "/style.css"].includes(path)
+      ) {
         const name = path === "/" ? "index.html" : path.slice(1);
         return send(
           await readFile(join(here, "public", name)),

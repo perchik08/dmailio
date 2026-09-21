@@ -3,6 +3,49 @@ import assert from "node:assert/strict";
 import { MailGateway, classify } from "../mail.mjs";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
+test("SMTP preserves rich signature, CID image and plain alternative in MIME", async () => {
+  const id = "b".repeat(32),
+    png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+      "base64",
+    );
+  const gateway = new MailGateway(
+    { image: () => ({ mime: "image/png", data: png }) },
+    "https://outreach.example.com",
+  );
+  let raw;
+  const transport = nodemailer.createTransport({
+    streamTransport: true,
+    buffer: true,
+  });
+  gateway.transport = () => ({
+    close() {},
+    async sendMail(v) {
+      raw = (await transport.sendMail(v)).message;
+      return { accepted: ["lead@example.com"] };
+    },
+  });
+  await gateway.send(
+    { email: "sender@example.com" },
+    {
+      recipient: "lead@example.com",
+      subject: "Hello",
+      body: "**Привет**",
+      format: "markdown",
+      signature: `С уважением, **Иван**\n![Logo](/api/images/${id})`,
+      signature_format: "markdown",
+      kind: "manual",
+      message_id: "<rich@example.com>",
+    },
+  );
+  const parsed = await simpleParser(raw, { skipImageLinks: true });
+  assert.match(parsed.html, /<strong>Иван<\/strong>/);
+  assert.match(parsed.html, new RegExp(`cid:${id}@dmailio`));
+  assert.equal(parsed.attachments.length, 1);
+  assert.deepEqual(parsed.attachments[0].content, png);
+  assert.match(parsed.text, /С уважением, Иван/);
+  assert.doesNotMatch(parsed.text, /\*\*/);
+});
 test("oversized inbox messages preserve reply headers and advance sync cursor", async () => {
   const gateway = new MailGateway({}, "https://example.com");
   gateway.imap = () => ({
