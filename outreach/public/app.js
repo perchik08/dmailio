@@ -23,6 +23,9 @@ const labels = {
   received: "Получено",
   replied: "Ответил",
   bounced: "Недоставка",
+  warming: "Прогревается",
+  waiting: "Ожидает второй ящик",
+  error: "Ошибка подключения",
   unsubscribed: "Отписан",
   invalid: "Ошибка переменных",
   uncertain: "Нужна проверка",
@@ -50,7 +53,8 @@ let state = { mailboxes: [], campaigns: [] },
   parsed = null,
   inboxCampaign = "",
   threadId = "",
-  analyticsCampaign = "";
+  analyticsCampaign = "",
+  selectedMailboxes = new Set();
 async function api(path, data) {
   const r = await fetch("/api" + path, {
     method: data === undefined ? "GET" : "POST",
@@ -97,7 +101,6 @@ function shell(body) {
     ["inbox", "Инбокс"],
     ["analytics", "Аналитика"],
     ["mailboxes", "Почты"],
-    ["warmup", "Прогрев"],
   ]
     .map(
       ([id, name]) =>
@@ -133,7 +136,6 @@ async function refresh() {
   if (current) return renderCampaign();
   if (page === "campaigns") campaigns();
   if (page === "mailboxes") mailboxes();
-  if (page === "warmup") warmup();
   if (page === "inbox") await inbox();
   if (page === "analytics") await analytics();
 }
@@ -429,10 +431,147 @@ function dialog(content) {
   el.addEventListener("close", () => el.remove());
 }
 function mailboxes() {
+  selectedMailboxes = new Set(
+    [...selectedMailboxes].filter((id) =>
+      state.mailboxes.some((m) => m.id === id),
+    ),
+  );
+  const warmupRows = state.mailboxes.filter((m) =>
+    ["warming", "waiting"].includes(m.warmupStatus),
+  ).length;
+  const attention = state.mailboxes.filter((m) =>
+    ["unverified", "error"].includes(m.warmupStatus),
+  ).length;
   shell(
-    `<div class="top"><div><h1>Почты</h1><p class="hint">Отправка, приём ответов и лимиты каждого ящика</p></div><button id="add-mailbox" class="primary">+ Подключить почту</button></div>${state.mailboxes.length ? `<div class="panel table-scroll"><table><tr><th>Ящик</th><th>Подключение</th><th>Лимит / 24 ч.</th><th>Синхронизация</th><th></th></tr>${state.mailboxes.map((m) => `<tr><td><strong>${escape(m.email)}</strong><p class="hint">${escape(m.name)} ${escape(m.surname)}</p></td><td>${badge(m.verified ? "connected" : "unverified")}<p class="hint">${escape(m.error)}</p></td><td>${m.limit}</td><td>${date(m.lastSync)}</td><td><button data-signature-mailbox="${m.id}">Подпись</button> <button data-edit-mailbox="${m.id}">Настройки</button> <button data-verify="${m.id}">Проверить</button></td></tr>`).join("")}</table></div>` : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'}`,
+    `<div class="top"><div><h1>Почты</h1><p class="hint">Подключения, прогрев и техническое состояние ящиков</p></div><button id="add-mailbox" class="primary">+ Подключить почту</button></div>${
+      state.mailboxes.length
+        ? `<div class="mailbox-summary" aria-label="Сводка по почтам"><div><span>Всего ящиков</span><strong>${state.mailboxes.length}</strong></div><div><span>Прогрев включён</span><strong>${warmupRows}</strong></div><div><span>Нужны действия</span><strong>${attention}</strong></div></div><div class="alert warmup-note"><strong>Прогрев</strong> — контрольная переписка между вашими проверенными ящиками. Нужны минимум два ящика с разрешением владельцев. Показатель здоровья отражает подключение и обмен письмами, но не гарантирует попадание во входящие.</div><section class="mailbox-panel"><div class="mailbox-toolbar"><label class="mailbox-search">Поиск<input id="mailbox-search" type="search" placeholder="Имя или адрес почты"></label><div class="bulk-actions"><span id="selected-count">Ничего не выбрано</span><button id="bulk-start" class="primary" disabled>Включить прогрев</button><button id="bulk-pause" disabled>Поставить на паузу</button></div></div><div class="table-scroll"><table class="mailbox-table"><thead><tr><th class="select-cell"><input id="select-all-mailboxes" type="checkbox" aria-label="Выбрать все почты"></th><th>Прогрев</th><th>Ящик</th><th>Статус прогрева</th><th>Отправлено</th><th>Ответы</th><th>Здоровье</th><th>Действия</th></tr></thead><tbody>${state.mailboxes
+            .map(
+              (m) =>
+                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td><label class="switch" title="Включить или приостановить прогрев"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-warmup-settings="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td><button class="status-button" data-warmup-settings="${m.id}">${badge(m.warmupStatus)}${m.warmupStatus === "warming" ? `<small>до ${m.currentWarmupLimit} писем/день</small>` : m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-health="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}">Подпись</button><button data-edit-mailbox="${m.id}">Настройки</button><button data-verify="${m.id}">${m.verified ? "Перепроверить" : "Проверить"}</button></div></td></tr>`,
+            )
+            .join("")}</tbody></table></div></section>`
+        : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'
+    }`,
   );
   click("add-mailbox", () => mailboxDialog());
+  const updateSelection = () => {
+    const visible = [...document.querySelectorAll("[data-mailbox-row]")].filter(
+      (row) => !row.hidden,
+    );
+    const visibleIds = visible.map(
+      (row) => row.querySelector("[data-select-mailbox]").dataset.selectMailbox,
+    );
+    const selectedVisible = visibleIds.filter((id) =>
+      selectedMailboxes.has(id),
+    );
+    const count = selectedMailboxes.size;
+    const label = document.querySelector("#selected-count");
+    if (label)
+      label.textContent = count ? `Выбрано: ${count}` : "Ничего не выбрано";
+    for (const id of ["bulk-start", "bulk-pause"])
+      if (document.getElementById(id))
+        document.getElementById(id).disabled = !count;
+    const all = document.querySelector("#select-all-mailboxes");
+    if (all) {
+      all.checked =
+        visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+      all.indeterminate =
+        selectedVisible.length > 0 &&
+        selectedVisible.length < visibleIds.length;
+    }
+  };
+  document.querySelector("#mailbox-search")?.addEventListener("input", (e) => {
+    const value = e.target.value.trim().toLowerCase();
+    document.querySelectorAll("[data-mailbox-row]").forEach((row) => {
+      row.hidden = !row.dataset.search.includes(value);
+    });
+    updateSelection();
+  });
+  document.querySelectorAll("[data-select-mailbox]").forEach((input) => {
+    input.onchange = () => {
+      if (input.checked) selectedMailboxes.add(input.dataset.selectMailbox);
+      else selectedMailboxes.delete(input.dataset.selectMailbox);
+      updateSelection();
+    };
+  });
+  const all = document.querySelector("#select-all-mailboxes");
+  if (all)
+    all.onchange = () => {
+      document.querySelectorAll("[data-mailbox-row]").forEach((row) => {
+        if (row.hidden) return;
+        const input = row.querySelector("[data-select-mailbox]");
+        input.checked = all.checked;
+        if (all.checked) selectedMailboxes.add(input.dataset.selectMailbox);
+        else selectedMailboxes.delete(input.dataset.selectMailbox);
+      });
+      updateSelection();
+    };
+  const bulk = async (enabled) => {
+    if (
+      enabled &&
+      !confirm(
+        "Включить контрольную переписку выбранных ящиков? Вы подтверждаете согласие их владельцев на обмен письмами внутри команды.",
+      )
+    )
+      return;
+    await api("/mailboxes/warmup/bulk", {
+      ids: [...selectedMailboxes],
+      enabled,
+    });
+    selectedMailboxes.clear();
+    await refresh();
+    notice(enabled ? "Прогрев включён" : "Прогрев поставлен на паузу");
+  };
+  click("bulk-start", () => bulk(true));
+  click("bulk-pause", () => bulk(false));
+  document.querySelectorAll("[data-warmup-toggle]").forEach((input) => {
+    input.onchange = action(async () => {
+      const m = state.mailboxes.find(
+        (row) => row.id === input.dataset.warmupToggle,
+      );
+      const enabled = input.checked;
+      if (
+        enabled &&
+        !confirm(
+          `Включить контрольную переписку для ${m.email}? Вы подтверждаете согласие владельца ящика.`,
+        )
+      ) {
+        input.checked = false;
+        return;
+      }
+      try {
+        await api("/mailboxes/" + m.id + "/warmup", {
+          ...m.warmup,
+          enabled,
+          consent: enabled ? true : m.warmup.consent,
+        });
+      } catch (error) {
+        input.checked = !enabled;
+        throw error;
+      }
+      await refresh();
+      notice(enabled ? "Прогрев включён" : "Прогрев поставлен на паузу");
+    });
+  });
+  document
+    .querySelectorAll("[data-warmup-settings]")
+    .forEach(
+      (button) =>
+        (button.onclick = () =>
+          warmupDialog(
+            state.mailboxes.find((m) => m.id === button.dataset.warmupSettings),
+          )),
+    );
+  document
+    .querySelectorAll("[data-health]")
+    .forEach(
+      (button) =>
+        (button.onclick = () =>
+          healthDialog(
+            state.mailboxes.find((m) => m.id === button.dataset.health),
+          )),
+    );
   document
     .querySelectorAll("[data-signature-mailbox]")
     .forEach(
@@ -463,6 +602,54 @@ function mailboxes() {
           await refresh();
         }
       })),
+  );
+  updateSelection();
+}
+
+function healthBody(m) {
+  const parts = [
+    ["Подключение", m.health.parts.connection, 40],
+    ["Синхронизация IMAP", m.health.parts.sync, 25],
+    ["Успешная отправка", m.health.parts.sending, 20],
+    ["Получение прогревочных писем", m.health.parts.receiving, 15],
+  ];
+  return `<div class="health-total"><strong>${m.health.score}</strong><span>из 100</span></div><div class="health-parts">${parts.map(([name, value, max]) => `<div><div class="row spaced"><span>${name}</span><strong>${value}/${max}</strong></div><div class="progress"><span style="width:${Math.round((value / max) * 100)}%"></span></div></div>`).join("")}</div><p class="hint">Это техническая оценка Dmailio: подключение, свежесть синхронизации и результаты контрольного обмена. Она не измеряет репутацию домена и не гарантирует попадание во входящие.</p>`;
+}
+
+function healthDialog(m) {
+  dialog(
+    `<h2>Здоровье · ${escape(m.email)}</h2>${m.error ? `<div class="alert connection-error"><strong>Ошибка подключения</strong><br>${escape(m.error)}</div>` : ""}${healthBody(m)}`,
+  );
+}
+
+function warmupDialog(m) {
+  dialog(
+    `<h2>Прогрев · ${escape(m.email)}</h2><div class="warmup-dialog-summary"><div><span>Статус</span>${badge(m.warmupStatus)}</div><div><span>Отправлено</span><strong>${m.warmupStats.sent}</strong></div><div><span>Ответы</span><strong>${m.warmupStats.replies}</strong></div></div>${healthBody(m)}<form id="warmup-settings-form"><div class="grid"><label>Начинать с писем в день<input name="start" type="number" min="1" max="100" value="${m.warmup.start}"></label><label>Увеличивать ежедневно на<input name="increase" type="number" min="1" max="100" value="${m.warmup.increase}"></label><label>Максимум писем в день<input name="max" type="number" min="1" max="100" value="${m.warmup.max}"></label></div><label class="check"><input name="consent" type="checkbox" ${m.warmup.consent ? "checked" : ""}>Владелец разрешил обмен с другими ящиками этой команды</label><label class="check"><input name="enabled" type="checkbox" ${m.warmup.enabled ? "checked" : ""}>Прогрев включён</label><div class="actions"><button class="primary">Сохранить настройки</button></div></form>`,
+  );
+  document.querySelector("#warmup-settings-form").onsubmit = action(
+    async (e) => {
+      e.preventDefault();
+      const data = new FormData(e.target);
+      const enabled = data.has("enabled");
+      if (
+        enabled &&
+        !m.warmup.enabled &&
+        !confirm(
+          "Включить реальную контрольную переписку этого ящика с другими участниками прогрева?",
+        )
+      )
+        return;
+      await api("/mailboxes/" + m.id + "/warmup", {
+        enabled,
+        consent: data.has("consent"),
+        start: Number(data.get("start")),
+        increase: Number(data.get("increase")),
+        max: Number(data.get("max")),
+      });
+      document.querySelector("dialog").remove();
+      await refresh();
+      notice("Настройки прогрева сохранены");
+    },
   );
 }
 function signatureDialog(m) {
@@ -550,45 +737,6 @@ function mailboxDialog(
     await refresh();
     notice("Сохранено. Нажмите «Проверить» перед отправкой.");
   });
-}
-function warmup() {
-  shell(
-    `<div class="top"><div><h1>Прогрев</h1><p class="hint">Контрольная переписка между вашими подключёнными ящиками</p></div></div><div class="alert">Нужны минимум два проверенных ящика с согласием владельцев. Переписка не гарантирует попадание во входящие. Прогрев не входит в аналитику кампаний.</div>${
-      state.mailboxes.length
-        ? `<div class="grid">${state.mailboxes
-            .map((m) => {
-              const w = m.warmup;
-              const stats = state.warmup.filter((s) => s.mailbox_id === m.id);
-              return `<form class="panel warmup-form" data-id="${m.id}"><h2>${escape(m.email)}</h2><p class="hint">Отправлено: ${stats.filter((s) => s.direction === "out" && s.status === "sent").reduce((n, s) => n + s.count, 0)} · Получено: ${stats.filter((s) => s.direction === "in").reduce((n, s) => n + s.count, 0)}</p><label>Начинать с писем в день<input name="start" type="number" min="1" max="100" value="${w.start}"></label><label>Увеличивать ежедневно на<input name="increase" type="number" min="1" max="100" value="${w.increase}"></label><label>Максимум писем в день<input name="max" type="number" min="1" max="100" value="${w.max}"></label><label class="check"><input name="consent" type="checkbox" ${w.consent ? "checked" : ""}>Разрешаю обмен с другими ящиками этой команды</label><label class="check"><input name="enabled" type="checkbox" ${w.enabled ? "checked" : ""}>Прогрев включён</label><div class="actions"><button class="primary">Сохранить</button></div></form>`;
-            })
-            .join("")}</div>`
-        : '<div class="empty"><h2>Сначала подключите почты</h2><p>После проверки SMTP и IMAP здесь появятся настройки прогрева.</p></div>'
-    }`,
-  );
-  document.querySelectorAll(".warmup-form").forEach(
-    (f) =>
-      (f.onsubmit = action(async (e) => {
-        e.preventDefault();
-        const data = new FormData(f);
-        const enabled = data.has("enabled");
-        if (
-          enabled &&
-          !confirm(
-            "Включить реальную контрольную переписку этого ящика с другими участниками прогрева?",
-          )
-        )
-          return;
-        await api("/mailboxes/" + f.dataset.id + "/warmup", {
-          enabled,
-          consent: data.has("consent"),
-          start: Number(data.get("start")),
-          increase: Number(data.get("increase")),
-          max: Number(data.get("max")),
-        });
-        await refresh();
-        notice("Настройки прогрева сохранены");
-      })),
-  );
 }
 async function inbox() {
   const threads = await api("/inbox?campaign=" + inboxCampaign);

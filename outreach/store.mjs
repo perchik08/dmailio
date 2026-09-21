@@ -151,6 +151,15 @@ export class Store {
     const row = this.db.prepare("SELECT * FROM mailboxes WHERE id=?").get(id);
     requireValue(row, "Ящик не найден");
     const cfg = JSON.parse(row.config);
+    cfg.warmup = {
+      enabled: false,
+      consent: false,
+      start: 2,
+      increase: 1,
+      max: 10,
+      since: 0,
+      ...(cfg.warmup || {}),
+    };
     const result = {
       ...cfg,
       id,
@@ -924,6 +933,107 @@ export class Store {
       .prepare("UPDATE mailboxes SET config=? WHERE id=?")
       .run(json(cfg), id);
     return this.mailbox(id);
+  }
+  bulkWarmup(ids, enabled, now = Date.now()) {
+    requireValue(
+      Array.isArray(ids) && ids.length > 0 && ids.length <= 1000,
+      "Выберите от 1 до 1000 ящиков",
+    );
+    const selected = [...new Set(ids.map(String))];
+    const mailboxes = selected.map((id) => this.mailbox(id));
+    if (enabled) {
+      requireValue(
+        mailboxes.every((m) => m.verified && m.enabled),
+        "Для прогрева нужны проверенные и включённые ящики",
+      );
+      const selectedIds = new Set(selected);
+      const futurePool = this.mailboxes().filter(
+        (m) =>
+          m.verified &&
+          m.enabled &&
+          !m.error &&
+          (selectedIds.has(m.id) || (m.warmup?.enabled && m.warmup.consent)),
+      );
+      requireValue(
+        futurePool.length >= 2,
+        "Для прогрева нужны минимум два проверенных ящика",
+      );
+    }
+    return this.transaction(() =>
+      mailboxes.map((m) =>
+        this.warmup(
+          m.id,
+          {
+            ...m.warmup,
+            enabled,
+            consent: enabled ? true : m.warmup.consent,
+          },
+          now,
+        ),
+      ),
+    );
+  }
+  mailboxOverview(now = Date.now()) {
+    const mailboxes = this.mailboxes();
+    const activePool = mailboxes.filter(
+      (m) =>
+        m.verified &&
+        m.enabled &&
+        !m.error &&
+        m.warmup?.enabled &&
+        m.warmup.consent,
+    ).length;
+    const stats = this.db.prepare(
+      `SELECT
+        coalesce(sum(direction='out' AND status='sent'),0) sent,
+        coalesce(sum(direction='in'),0) received,
+        coalesce(sum(direction='in' AND parent IS NOT NULL),0) replies,
+        coalesce(sum(direction='out' AND status='failed'),0) failed,
+        coalesce(sum(direction='out' AND status='unknown'),0) uncertain,
+        coalesce(sum(direction='out' AND status='sent' AND created>=?),0) sent24h,
+        coalesce(sum(direction='in' AND parent IS NOT NULL AND created>=?),0) replies24h
+      FROM messages WHERE mailbox_id=? AND kind='warmup'`,
+    );
+    return mailboxes.map((m) => {
+      const warmupStats = stats.get(now - 86400000, now - 86400000, m.id);
+      const connectionHealthy = m.verified && m.enabled && !m.error;
+      const attempts =
+        warmupStats.sent + warmupStats.failed + warmupStats.uncertain;
+      const parts = {
+        connection: connectionHealthy ? 40 : 0,
+        sync:
+          connectionHealthy && m.lastSync && now - m.lastSync <= 15 * 60000
+            ? 25
+            : 0,
+        sending: connectionHealthy
+          ? attempts
+            ? Math.round((20 * warmupStats.sent) / attempts)
+            : 0
+          : 0,
+        receiving: connectionHealthy && warmupStats.received ? 15 : 0,
+      };
+      let warmupStatus = "paused";
+      if (!m.verified) warmupStatus = "unverified";
+      else if (!m.enabled || m.error) warmupStatus = "error";
+      else if (m.warmup?.enabled && m.warmup.consent)
+        warmupStatus = activePool >= 2 ? "warming" : "waiting";
+      const days = m.warmup?.since
+        ? Math.max(0, Math.floor((now - m.warmup.since) / 86400000))
+        : 0;
+      return {
+        ...m,
+        warmupStatus,
+        warmupStats,
+        currentWarmupLimit: Math.min(
+          m.warmup.max,
+          m.warmup.start + days * m.warmup.increase,
+        ),
+        health: {
+          score: Object.values(parts).reduce((sum, value) => sum + value, 0),
+          parts,
+        },
+      };
+    });
   }
   reserveWarmup(now, healthy) {
     return this.transaction(() => {

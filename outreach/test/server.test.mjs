@@ -64,6 +64,43 @@ test("API requires login, same-origin writes and excludes credentials", async ()
       headers: { cookie },
     });
     assert.deepEqual(await response.json(), []);
+    const mailbox = (address) => ({
+      email: address,
+      name: "Тест",
+      limit: 10,
+      smtp: {
+        host: "smtp.example.com",
+        port: 465,
+        secure: true,
+        user: address,
+        password: "secret",
+      },
+      imap: {
+        host: "imap.example.com",
+        port: 993,
+        secure: true,
+        user: address,
+        password: "secret",
+      },
+    });
+    const first = store.saveMailbox(mailbox("one@example.com"));
+    const second = store.saveMailbox(mailbox("two@example.com"));
+    store.markMailbox(first.id, true);
+    store.markMailbox(second.id, true);
+    const bulk = await fetch(base + "/api/mailboxes/warmup/bulk", {
+      method: "POST",
+      headers: {
+        cookie,
+        origin: "http://localhost:9100",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ ids: [first.id, second.id], enabled: true }),
+    });
+    assert.equal(bulk.status, 200);
+    const overview = await bulk.json();
+    assert.equal(overview.length, 2);
+    assert.equal(overview[0].warmupStatus, "warming");
+    assert.equal(typeof overview[0].health.score, "number");
     const csv = await fetch(base + "/api/import/preview", {
       method: "POST",
       headers: { cookie, origin: "http://localhost:9100" },

@@ -316,3 +316,148 @@ test("unhealthy large campaign does not starve a later healthy campaign", () => 
   );
   s.close();
 });
+
+test("mailbox overview reports warmup status, totals and transparent technical health", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const now = new Date("2026-09-21T12:00:00Z").getTime();
+  const first = s.saveMailbox(mailbox);
+  const second = s.saveMailbox({
+    ...mailbox,
+    email: "second@example.com",
+    smtp: { ...mailbox.smtp, user: "second@example.com" },
+    imap: { ...mailbox.imap, user: "second@example.com" },
+  });
+  for (const m of [first, second]) {
+    s.markMailbox(m.id, true);
+    s.synced(m.id, { validity: 1 }, now - 60_000);
+    s.warmup(
+      m.id,
+      { enabled: true, consent: true, start: 2, increase: 1, max: 10 },
+      now,
+    );
+  }
+  const fresh = s.mailboxOverview(now).find((m) => m.id === first.id);
+  assert.equal(fresh.health.score, 65);
+  assert.equal(fresh.health.parts.sending, 0);
+  assert.equal(fresh.health.parts.receiving, 0);
+  const outgoing = s.insertMessage(
+    {
+      mailbox_id: first.id,
+      kind: "warmup",
+      recipient: second.email,
+      subject: "Проверка",
+      body: "Тест",
+    },
+    now - 30_000,
+  );
+  s.finish(outgoing.id, "sent", now - 20_000);
+  s.ingest(
+    second.id,
+    {
+      remoteId: "warmup-delivery-1",
+      messageId: outgoing.message_id,
+      references: [],
+      from: first.email,
+      subject: "Проверка",
+      text: "Тест",
+      type: "reply",
+    },
+    now - 15_000,
+  );
+  s.ingest(
+    first.id,
+    {
+      remoteId: "warmup-reply-1",
+      messageId: "<reply@example.com>",
+      references: [outgoing.message_id],
+      from: second.email,
+      subject: "Re: Проверка",
+      text: "Получено",
+      type: "reply",
+    },
+    now - 10_000,
+  );
+
+  const row = s.mailboxOverview(now).find((m) => m.id === first.id);
+  assert.equal(row.warmupStatus, "warming");
+  assert.equal(row.warmupStats.sent, 1);
+  assert.equal(row.warmupStats.replies, 1);
+  assert.equal(row.warmupStats.sent24h, 1);
+  assert.equal(row.health.score, 100);
+  assert.deepEqual(row.health.parts, {
+    connection: 40,
+    sync: 25,
+    sending: 20,
+    receiving: 15,
+  });
+  assert.equal(
+    s.mailboxOverview(now).find((m) => m.id === second.id).warmupStats.replies,
+    0,
+  );
+  s.close();
+});
+
+test("mailbox overview upgrades legacy configs without warmup settings", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const m = s.saveMailbox(mailbox);
+  const row = s.db.prepare("SELECT config FROM mailboxes WHERE id=?").get(m.id);
+  const config = JSON.parse(row.config);
+  delete config.warmup;
+  s.db
+    .prepare("UPDATE mailboxes SET config=? WHERE id=?")
+    .run(JSON.stringify(config), m.id);
+
+  const overview = s.mailboxOverview(1000);
+  assert.equal(overview[0].warmupStatus, "unverified");
+  assert.deepEqual(overview[0].warmup, {
+    enabled: false,
+    consent: false,
+    start: 2,
+    increase: 1,
+    max: 10,
+    since: 0,
+  });
+  s.close();
+});
+
+test("bulk warmup starts verified mailboxes together and pauses selected rows", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const first = s.saveMailbox(mailbox);
+  const second = s.saveMailbox({
+    ...mailbox,
+    email: "second@example.com",
+    smtp: { ...mailbox.smtp, user: "second@example.com" },
+    imap: { ...mailbox.imap, user: "second@example.com" },
+  });
+  s.markMailbox(first.id, true);
+  s.markMailbox(second.id, true);
+
+  s.bulkWarmup([first.id, second.id], true, 1000);
+  assert.equal(s.mailbox(first.id).warmup.enabled, true);
+  assert.equal(s.mailbox(second.id).warmup.consent, true);
+  assert.equal(
+    s.mailboxOverview(1000).filter((m) => m.warmupStatus === "warming").length,
+    2,
+  );
+
+  s.bulkWarmup([first.id], false, 2000);
+  assert.equal(s.mailbox(first.id).warmup.enabled, false);
+  assert.equal(s.mailbox(first.id).warmup.consent, true);
+  assert.equal(
+    s.mailboxOverview(2000).find((m) => m.id === first.id).warmupStatus,
+    "paused",
+  );
+  s.close();
+});
+
+test("bulk warmup refuses a pool with fewer than two verified mailboxes", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const first = s.saveMailbox(mailbox);
+  s.markMailbox(first.id, true);
+  assert.throws(
+    () => s.bulkWarmup([first.id], true, 1000),
+    /минимум два проверенных ящика/,
+  );
+  assert.equal(s.mailbox(first.id).warmup.enabled, false);
+  s.close();
+});

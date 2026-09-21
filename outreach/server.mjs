@@ -136,15 +136,18 @@ export function createApp({ store, password, publicURL, gateway, worker }) {
       }
       if (path === "/api/state" && method === "GET")
         return send({
-          mailboxes: store.mailboxes(),
+          mailboxes: store.mailboxOverview(),
           campaigns: store.campaigns(),
-          warmup: store.warmupStats(),
           workerError: worker.lastError || "",
         });
       if (path === "/api/mailboxes" && method === "GET")
-        return send(store.mailboxes());
+        return send(store.mailboxOverview());
       if (path === "/api/mailboxes" && method === "POST")
         return send(store.saveMailbox(data), 201);
+      if (path === "/api/mailboxes/warmup/bulk" && method === "POST") {
+        store.bulkWarmup(data.ids, data.enabled);
+        return send(store.mailboxOverview());
+      }
       if (path === "/api/images" && method === "POST") {
         requireValue(
           typeof data.base64 === "string" &&
