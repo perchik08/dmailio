@@ -1,9 +1,9 @@
 import { mountEditor } from "/editor.js";
 const root = document.querySelector("#app");
 const fontKey = "dmailio-ui-font";
-let uiFont = "onest";
+let uiFont = "inter";
 try {
-  if (localStorage.getItem(fontKey) === "inter") uiFont = "inter";
+  if (localStorage.getItem(fontKey) === "onest") uiFont = "onest";
 } catch {
   // Browser storage can be disabled; the font switch still works for this visit.
 }

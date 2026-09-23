@@ -37,7 +37,8 @@
     U+2215, U+FEFF, U+FFFD;
 }
 :root {
-  --font-ui: "Onest UI", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: "Inter UI", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-muted: #536078;
   --type-2xs: 10px;
   --type-xs: 11px;
   --type-sm: 12px;
@@ -59,8 +60,8 @@
   --accent: #535ff4;
   --line: #e6e8f0;
 }
-:root[data-ui-font="inter"] {
-  --font-ui: "Inter UI", system-ui, -apple-system, "Segoe UI", sans-serif;
+:root[data-ui-font="onest"] {
+  --font-ui: "Onest UI", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * {
   box-sizing: border-box;
@@ -137,8 +138,9 @@ a {
   margin-bottom: 4px;
 }
 .subtle {
-  color: #73798b;
-  font-size: var(--type-meta);
+  color: var(--text-muted);
+  font-size: var(--type-table);
+  line-height: 1.5;
 }
 .sidebar nav {
   margin-top: 30px;
@@ -156,8 +158,13 @@ a {
 }
 .sidebar footer {
   margin-top: 10px;
-  font-size: var(--type-sm);
-  color: #73798b;
+  font-size: var(--type-table);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.sidebar footer button {
+  font-weight: 600;
+  color: #353d50;
 }
 .font-picker {
   margin-top: auto;
@@ -167,7 +174,7 @@ a {
 .font-picker > span {
   display: block;
   margin-bottom: 8px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-sm);
   font-weight: 600;
 }
@@ -258,7 +265,7 @@ h3 {
 .empty p {
   max-width: 500px;
   margin: 0 auto 25px;
-  color: #73798b;
+  color: var(--text-muted);
 }
 .grid {
   display: grid;
@@ -277,9 +284,13 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 12px;
 }
+.metric .hint {
+  font-weight: 600;
+}
 .metric strong {
   font-size: var(--type-metric);
   font-variant-numeric: tabular-nums;
+  color: #252638;
   display: block;
   margin-top: 9px;
 }
@@ -294,8 +305,8 @@ table {
 }
 th {
   text-align: left;
-  color: #73798b;
-  font-weight: 500;
+  color: var(--text-muted);
+  font-weight: 600;
   padding: 15px 12px;
 }
 td {
@@ -403,9 +414,9 @@ fieldset {
   min-width: 0;
 }
 .hint {
-  font-size: var(--type-meta);
+  font-size: var(--type-table);
   line-height: 1.6;
-  color: #73798b;
+  color: var(--text-muted);
 }
 .alert {
   border-left: 3px solid #d89822;
@@ -435,7 +446,7 @@ fieldset {
 }
 .step small {
   display: block;
-  color: #73798b;
+  color: var(--text-muted);
   margin: 8px 0;
 }
 .step p {
@@ -478,7 +489,7 @@ fieldset {
 .thread-button small {
   display: block;
   margin-top: 8px;
-  color: #73798b;
+  color: var(--text-muted);
 }
 .message {
   padding: 20px;
@@ -541,7 +552,7 @@ dialog::backdrop {
   text-align: right;
 }
 .muted {
-  color: #73798b;
+  color: var(--text-muted);
 }
 .progress {
   height: 6px;
@@ -675,7 +686,7 @@ code {
 .detail-metric span,
 .detail-metric small {
   display: block;
-  color: #73798b;
+  color: var(--text-muted);
 }
 .detail-metric strong {
   display: block;
@@ -694,7 +705,7 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-meta);
 }
 .chart-legend span::before {
@@ -786,7 +797,7 @@ code {
 }
 .chart-empty,
 .soft-empty {
-  color: #73798b;
+  color: var(--text-muted);
   text-align: center;
 }
 .provider-list {
@@ -801,7 +812,7 @@ code {
   gap: 18px;
 }
 .provider-row > span {
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-meta);
   text-align: right;
 }
@@ -824,7 +835,7 @@ code {
   background: white;
 }
 .dns-intro span {
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-meta);
 }
 .dns-grid {
@@ -877,7 +888,7 @@ code {
 }
 .provider-options legend {
   padding: 0 5px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-meta);
 }
 .provider-options .check {
@@ -1124,7 +1135,7 @@ dialog:has(#signature-form) {
   border-radius: 12px;
 }
 .mailbox-summary span {
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-meta);
 }
 .mailbox-summary strong {
@@ -1151,7 +1162,7 @@ dialog:has(#signature-form) {
 .mailbox-search {
   width: min(360px, 100%);
   margin: 0;
-  color: #73798b;
+  color: var(--text-muted);
 }
 .mailbox-search input {
   margin-top: 5px;
@@ -1165,7 +1176,7 @@ dialog:has(#signature-form) {
 }
 #selected-count {
   min-width: 125px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-meta);
 }
 .mailbox-table {
@@ -1235,7 +1246,7 @@ dialog:has(#signature-form) {
 .warmup-score small {
   display: block;
   margin-top: 6px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-sm);
 }
 .connection-error {
@@ -1247,7 +1258,7 @@ dialog:has(#signature-form) {
 .status-button small,
 .cell-note {
   margin-top: 6px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-sm);
   white-space: nowrap;
 }
@@ -1342,7 +1353,7 @@ dialog:has(#signature-form) {
   font-variant-numeric: tabular-nums;
 }
 .health-total span {
-  color: #73798b;
+  color: var(--text-muted);
 }
 .health-parts {
   display: grid;
@@ -1368,7 +1379,7 @@ dialog:has(#signature-form) {
 }
 .warmup-dialog-summary span:first-child {
   display: block;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-sm);
   margin-bottom: 8px;
 }
@@ -1393,7 +1404,7 @@ dialog:has(#signature-form) {
 }
 .readiness-total span {
   margin-top: 6px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-meta);
 }
 .warmup-scale {
@@ -1406,7 +1417,7 @@ dialog:has(#signature-form) {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  color: #73798b;
+  color: var(--text-muted);
   font-size: var(--type-sm);
 }
 .warmup-scale b {
