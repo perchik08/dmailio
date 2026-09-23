@@ -35,6 +35,18 @@ test("Markdown supports formatted email, tables, links and readable plain altern
   assert.match(p.text, /С уважением/);
   assert.doesNotMatch(p.text, /\*\*Иван/);
 });
+test("rich editor HTML preserves safe text styles and strips executable markup", () => {
+  const p = renderContent({
+    body: '<p style="text-align:center"><span style="font-family:Arial;font-size:16px;color:#334455;background-color:#ffeeaa">Привет</span> <strong>друг</strong></p><ul><li>Пункт</li></ul><script>alert(1)</script>',
+    format: "markdown",
+  });
+  assert.match(p.html, /text-align:center/);
+  assert.match(p.html, /<span[^>]*font-family:Arial/);
+  assert.match(p.html, /font-size:16px/);
+  assert.match(p.html, /<strong>друг<\/strong>/);
+  assert.match(p.html, /<ul><li>Пункт<\/li><\/ul>/);
+  assert.doesNotMatch(p.html, /<script|alert\(1\)/);
+});
 test("untrusted HTML and URL schemes cannot execute or load local files", () => {
   const p = renderContent({
     body: '<script>alert(1)</script><img src="file:///secret" onerror="alert(1)"><a href="javascript:alert(1)">bad</a><iframe src="https://evil.example"></iframe><div style="position:fixed;color:red">text</div>',

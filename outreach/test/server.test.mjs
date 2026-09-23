@@ -15,6 +15,12 @@ test("API requires login, same-origin writes and excludes credentials", async ()
   await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${app.address().port}`;
   try {
+    const script = await fetch(base + "/quill.js");
+    const stylesheet = await fetch(base + "/quill.snow.css");
+    assert.equal(script.status, 200);
+    assert.equal(stylesheet.status, 200);
+    assert.match(script.headers.get("content-type"), /javascript/);
+    assert.match(stylesheet.headers.get("content-type"), /css/);
     assert.equal((await fetch(base + "/api/mailboxes")).status, 401);
     assert.equal(
       (

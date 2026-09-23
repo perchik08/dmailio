@@ -102,6 +102,7 @@ export function renderContent(
             "font-weight": [/^(normal|bold|[1-9]00)$/],
             "font-style": [/^(normal|italic)$/],
             "font-size": [/^\d{1,2}(px|pt)$/],
+            "font-family": [/^(Arial|Georgia|Times New Roman|Courier New)$/i],
             "text-decoration": [/^(none|underline|line-through)$/],
           },
         },

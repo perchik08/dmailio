@@ -37,3 +37,13 @@
 - Recheck provider bars and chart density after production-like warmup data exists across Google, Yandex, Mail.ru, and another SMTP provider.
 
 final result: passed
+
+## Rich text editor, 2026-09-23
+
+- Reference: user's compact single-row toolbar screenshot (848 × 72 px). The editor uses Quill's toolbar icons, grouped controls, a white background, subtle dividers, and immediate formatting in the message body.
+- Browser QA on a local test installation: campaign body accepted bold text, links, bullet lists, images, and sender variables; saved HTML reopened with formatting intact. The sender token retained ordinary spaces after serialization.
+- The same shared editor mounts for campaign steps, inbox replies, and both mailbox signature forms. Existing plain and Markdown drafts keep their stored value until edited.
+- At a 1265 px viewport, the toolbar scrolls horizontally inside the narrower campaign card. At wide desktop widths, the full row fits. The message body remains available below the toolbar.
+- Server tests verify safe HTML rendering and local Quill assets; the full Node test suite and Prettier check pass.
+
+final result: passed

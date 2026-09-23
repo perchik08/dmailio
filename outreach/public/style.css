@@ -800,26 +800,130 @@ code {
 }
 .compose-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 0;
   align-items: center;
-  padding: 12px;
-  background: #f7f8ff;
+  padding: 7px 8px;
+  background: #fff;
   border: 1px solid #e6e8f0;
-  border-radius: 10px;
-  margin: 10px 0;
+  border-radius: 8px 8px 0 0;
+  margin: 10px 0 0;
+  overflow-x: auto;
+  white-space: nowrap;
 }
-.compose-toolbar label {
-  margin: 0;
-  min-width: 130px;
-  font-size: 12px;
+.compose-toolbar .ql-formats {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-right: 0;
+  padding: 0 8px;
+  border-right: 1px solid #e6e8f0;
+}
+.compose-toolbar .ql-formats:last-child {
+  border-right: 0;
 }
 .compose-toolbar button {
-  font-size: 12px;
-  padding: 8px 10px;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 28px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: #5e6470;
+  font-size: 18px;
+  line-height: 20px;
 }
-.compose-toolbar select {
-  margin-top: 4px;
+.compose-toolbar button:hover,
+.compose-toolbar button:focus-visible {
+  background: #f2f4fa;
+  color: #4658db;
+}
+.compose-toolbar .ql-picker {
+  color: #5e6470;
+}
+.compose-toolbar .ql-font {
+  width: 115px;
+}
+.compose-toolbar .ql-size {
+  width: 58px;
+}
+.compose-toolbar .ql-font .ql-picker-label[data-value="Arial"]::before,
+.compose-toolbar .ql-font .ql-picker-item[data-value="Arial"]::before {
+  content: "Arial";
+}
+.compose-toolbar .ql-font .ql-picker-label[data-value="Georgia"]::before,
+.compose-toolbar .ql-font .ql-picker-item[data-value="Georgia"]::before {
+  content: "Georgia";
+}
+.compose-toolbar
+  .ql-font
+  .ql-picker-label[data-value="Times New Roman"]::before,
+.compose-toolbar
+  .ql-font
+  .ql-picker-item[data-value="Times New Roman"]::before {
+  content: "Times New Roman";
+}
+.compose-toolbar .ql-font .ql-picker-label[data-value="Courier New"]::before,
+.compose-toolbar .ql-font .ql-picker-item[data-value="Courier New"]::before {
+  content: "Courier New";
+}
+.compose-toolbar .ql-size .ql-picker-label[data-value="12px"]::before,
+.compose-toolbar .ql-size .ql-picker-item[data-value="12px"]::before {
+  content: "12";
+}
+.compose-toolbar .ql-size .ql-picker-label[data-value="14px"]::before,
+.compose-toolbar .ql-size .ql-picker-item[data-value="14px"]::before {
+  content: "14";
+}
+.compose-toolbar .ql-size .ql-picker-label[data-value="16px"]::before,
+.compose-toolbar .ql-size .ql-picker-item[data-value="16px"]::before {
+  content: "16";
+}
+.compose-toolbar .ql-size .ql-picker-label[data-value="18px"]::before,
+.compose-toolbar .ql-size .ql-picker-item[data-value="18px"]::before {
+  content: "18";
+}
+.compose-toolbar .ql-size .ql-picker-label[data-value="24px"]::before,
+.compose-toolbar .ql-size .ql-picker-item[data-value="24px"]::before {
+  content: "24";
+}
+.compose-toolbar [data-tool="md"] {
+  width: 35px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.rich-source {
+  display: none !important;
+}
+.rich-editor.ql-container {
+  border: 1px solid #e6e8f0;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+.rich-editor .ql-editor {
+  min-height: 220px;
+  line-height: 1.5;
+}
+.editor .rich-editor .ql-editor {
+  min-height: 300px;
+}
+.rich-editor .ql-editor img {
+  max-width: 100%;
+  height: auto;
+}
+.emoji-panel {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #e6e8f0;
+  border-top: 0;
+}
+.emoji-panel button {
+  font-size: 20px;
+  border: 0;
+  background: transparent;
 }
 .insert-panel {
   display: flex;

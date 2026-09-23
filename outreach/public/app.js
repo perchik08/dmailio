@@ -331,7 +331,7 @@ function renderCampaign() {
       ]),
     ];
     box.innerHTML = `<div class="steps"><aside>${current.steps.map((s, i) => `<div class="step ${i === stepIndex ? "selected" : ""}"><button data-step="${i}">Письмо ${i + 1}</button><small>${i ? "Через " + s.delay + " дн." : "Начало цепочки"}</small><p>${escape(s.subject || "Тема предыдущего письма")}</p></div>`).join("")}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label>Задержка после предыдущего письма, дней<input id="delay" type="number" min="0" max="365" value="${s.delay}" ${stepIndex ? "" : "disabled"}></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
-    mountEditor(document.querySelector("#body"), {
+    const bodyEditor = mountEditor(document.querySelector("#body"), {
       api,
       notify: notice,
       format: s.format || "plain",
@@ -360,15 +360,7 @@ function renderCampaign() {
     document.querySelectorAll("[data-variable]").forEach(
       (b) =>
         (b.onclick = () => {
-          const area = document.querySelector("#body");
-          area.setRangeText(
-            "{{" + b.dataset.variable + "}}",
-            area.selectionStart,
-            area.selectionEnd,
-            "end",
-          );
-          area.dispatchEvent(new Event("input", { bubbles: true }));
-          area.focus();
+          bodyEditor.insertText("{{" + b.dataset.variable + "}}");
         }),
     );
     click("add-step", () => {
@@ -777,7 +769,7 @@ function renderMailboxSettings(m) {
   );
   let signatureFormat = m.signatureFormat || "markdown";
   const signatureArea = document.querySelector("#detail-signature-body");
-  mountEditor(signatureArea, {
+  const signatureEditor = mountEditor(signatureArea, {
     api,
     notify: notice,
     format: signatureFormat,
@@ -785,11 +777,11 @@ function renderMailboxSettings(m) {
       signatureFormat = value;
     },
   });
-  click("detail-signature-example", () => {
+  click("detail-signature-example", async () => {
     if (signatureArea.value.trim() && !confirm("Заменить подпись примером?"))
       return;
     signatureArea.value = `С уважением,\n**${[m.name, m.surname].filter(Boolean).join(" ") || "Ваше имя"}**\n\n[${m.email}](mailto:${m.email}) · [Telegram](https://t.me/username)`;
-    signatureArea.dispatchEvent(new Event("input", { bubbles: true }));
+    await signatureEditor.setContent(signatureArea.value);
   });
   document.querySelector("#detail-signature-form").onsubmit = action(
     async (event) => {
@@ -910,7 +902,7 @@ function signatureDialog(m) {
     `<h2>Подпись · ${escape(m.email)}</h2><p class="hint">Добавляется в кампании и ответы от этого ящика. Внутри письма её можно отключить.</p><form id="signature-form"><label for="signature-body">Текст подписи</label><textarea id="signature-body" maxlength="20000" placeholder="С уважением,&#10;Ваше имя&#10;Контакты и ссылки">${escape(m.signature)}</textarea><label class="check"><input id="signature-enabled" type="checkbox" ${m.signatureEnabled !== false ? "checked" : ""}>Автоматически добавлять подпись</label><div class="actions"><button type="button" id="signature-example">Вставить пример</button><button class="primary">Сохранить подпись</button></div></form>`,
   );
   const area = document.querySelector("#signature-body");
-  mountEditor(area, {
+  const signatureEditor = mountEditor(area, {
     api,
     notify: notice,
     format,
@@ -918,13 +910,10 @@ function signatureDialog(m) {
       format = value;
     },
   });
-  click("signature-example", () => {
+  click("signature-example", async () => {
     if (area.value.trim() && !confirm("Заменить подпись примером?")) return;
     area.value = `С уважением,\n**${[m.name, m.surname].filter(Boolean).join(" ") || "Ваше имя"}**\n\n[${m.email}](mailto:${m.email}) · [Telegram](https://t.me/username)\n[Сайт](https://example.com)`;
-    const select = area.parentElement.querySelector("[data-format]");
-    select.value = "markdown";
-    select.dispatchEvent(new Event("change"));
-    area.dispatchEvent(new Event("input"));
+    await signatureEditor.setContent(area.value);
   });
   document.querySelector("#signature-form").onsubmit = action(async (e) => {
     e.preventDefault();

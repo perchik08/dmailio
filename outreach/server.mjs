@@ -310,6 +310,16 @@ export function createApp({
       }
       if (path.startsWith("/api/"))
         return send({ error: "Метод не найден" }, 404);
+      if (method === "GET" && ["/quill.js", "/quill.snow.css"].includes(path)) {
+        const name = path.slice(1);
+        return send(
+          await readFile(join(here, "node_modules", "quill", "dist", name)),
+          200,
+          name.endsWith(".js")
+            ? "text/javascript; charset=utf-8"
+            : "text/css; charset=utf-8",
+        );
+      }
       if (
         method === "GET" &&
         ["/", "/app.js", "/editor.js", "/style.css"].includes(path)
