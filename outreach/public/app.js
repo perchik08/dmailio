@@ -129,6 +129,75 @@ function options(items, value, key = "id", label = "name") {
     )
     .join("");
 }
+function campaignFilter(id, value) {
+  const choices = [{ id: "", name: "Все кампании" }, ...state.campaigns];
+  const selected = choices.find((choice) => choice.id === value) || choices[0];
+  return `<div class="campaign-filter" id="${id}"><button type="button" class="campaign-filter-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="${id}-options" aria-label="Кампания: ${escape(selected.name)}"><span>${escape(selected.name)}</span><span class="filter-chevron" aria-hidden="true"></span></button><div class="campaign-filter-options" id="${id}-options" role="listbox" aria-label="Кампании" hidden>${choices.map((choice) => `<button type="button" class="campaign-filter-option" role="option" data-filter-value="${escape(choice.id)}" aria-selected="${choice.id === selected.id}" tabindex="-1">${escape(choice.name)}</button>`).join("")}</div></div>`;
+}
+function bindCampaignFilter(id, onChange) {
+  const filter = document.getElementById(id);
+  const trigger = filter.querySelector(".campaign-filter-trigger");
+  const menu = filter.querySelector(".campaign-filter-options");
+  const choices = [...menu.querySelectorAll(".campaign-filter-option")];
+  const close = (focusTrigger = false) => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (focusTrigger) trigger.focus();
+  };
+  const open = (direction = 0) => {
+    menu.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    const selected = choices.findIndex(
+      (choice) => choice.getAttribute("aria-selected") === "true",
+    );
+    choices[
+      direction < 0 ? choices.length - 1 : Math.max(0, selected)
+    ]?.focus();
+  };
+  trigger.onclick = () => (menu.hidden ? open() : close());
+  trigger.onkeydown = (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      open(event.key === "ArrowUp" ? -1 : 1);
+    } else if (event.key === "Escape") {
+      close();
+    }
+  };
+  menu.onkeydown = (event) => {
+    const index = choices.indexOf(document.activeElement);
+    const next = {
+      ArrowDown: (index + 1) % choices.length,
+      ArrowUp: (index - 1 + choices.length) % choices.length,
+      Home: 0,
+      End: choices.length - 1,
+    }[event.key];
+    if (next !== undefined) {
+      event.preventDefault();
+      choices[next].focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      close(true);
+    } else if (event.key === "Tab") {
+      close();
+    }
+  };
+  choices.forEach((choice) => {
+    choice.onclick = action(async () => {
+      close();
+      await onChange(choice.dataset.filterValue);
+    });
+  });
+}
+document.addEventListener("pointerdown", (event) => {
+  document.querySelectorAll(".campaign-filter").forEach((filter) => {
+    if (!filter.contains(event.target)) {
+      filter.querySelector(".campaign-filter-options").hidden = true;
+      filter
+        .querySelector(".campaign-filter-trigger")
+        .setAttribute("aria-expanded", "false");
+    }
+  });
+});
 function shell(body) {
   root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="logo">dmailio</div><div class="subtle">Аутрич для вашей команды</div><nav>${[
     ["campaigns", "Кампании", "bullhorn"],
@@ -1010,10 +1079,10 @@ function mailboxDialog(
 async function inbox() {
   const threads = await api("/inbox?campaign=" + inboxCampaign);
   shell(
-    `<div class="top"><div><h1>Инбокс</h1><p class="hint">Ответы на ваши кампании и история переписки</p></div><select id="inbox-filter"><option value="">Все кампании</option>${options(state.campaigns, inboxCampaign)}</select></div><div class="inbox"><aside>${threads.length ? threads.map((t) => `<button class="thread-button" data-thread="${t.id}"><strong>${escape(t.email)}</strong><small>${escape(t.campaign)}</small><small>${date(t.updated)} · ${escape(labels[t.label])}</small></button>`).join("") : '<div class="panel"><h2>Ответов пока нет</h2><p class="hint">Связанные с кампаниями ответы появятся после синхронизации почт.</p></div>'}</aside><div id="thread"><div class="empty"><h2>Выберите диалог</h2></div></div></div>`,
+    `<div class="top"><div><h1>Инбокс</h1><p class="hint">Ответы на ваши кампании и история переписки</p></div>${campaignFilter("inbox-filter", inboxCampaign)}</div><div class="inbox"><aside>${threads.length ? threads.map((t) => `<button class="thread-button" data-thread="${t.id}"><strong>${escape(t.email)}</strong><small>${escape(t.campaign)}</small><small>${date(t.updated)} · ${escape(labels[t.label])}</small></button>`).join("") : '<div class="panel"><h2>Ответов пока нет</h2><p class="hint">Связанные с кампаниями ответы появятся после синхронизации почт.</p></div>'}</aside><div id="thread"><div class="empty"><h2>Выберите диалог</h2></div></div></div>`,
   );
-  document.querySelector("#inbox-filter").onchange = action(async (e) => {
-    inboxCampaign = e.target.value;
+  bindCampaignFilter("inbox-filter", async (value) => {
+    inboxCampaign = value;
     threadId = "";
     await inbox();
   });
@@ -1091,10 +1160,10 @@ function analyticsBody(a) {
 async function analytics() {
   const a = await api("/analytics?campaign=" + analyticsCampaign);
   shell(
-    `<div class="top"><h1>Аналитика</h1><div class="row"><select id="analytics-filter"><option value="">Все кампании</option>${options(state.campaigns, analyticsCampaign)}</select><button id="export" class="icon-button">${icon("file-export")}Экспорт JSON</button></div></div>${analyticsBody(a)}`,
+    `<div class="top"><h1>Аналитика</h1><div class="row">${campaignFilter("analytics-filter", analyticsCampaign)}<button id="export" class="icon-button">${icon("file-export")}Экспорт JSON</button></div></div>${analyticsBody(a)}`,
   );
-  document.querySelector("#analytics-filter").onchange = action(async (e) => {
-    analyticsCampaign = e.target.value;
+  bindCampaignFilter("analytics-filter", async (value) => {
+    analyticsCampaign = value;
     await analytics();
   });
   click("export", () => {
