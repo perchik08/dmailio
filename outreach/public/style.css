@@ -293,6 +293,7 @@ h3 {
   color: #252638;
   display: block;
   margin-top: 9px;
+  text-align: center;
 }
 .table-scroll {
   overflow: auto;
@@ -313,6 +314,10 @@ td {
   padding: 19px 12px;
   border-top: 1px solid var(--line);
   vertical-align: top;
+}
+th.num,
+td.num {
+  text-align: center;
 }
 td button {
   padding: 6px 10px;
@@ -1225,11 +1230,20 @@ dialog:has(#signature-form) {
 .warmup-score {
   min-width: 220px;
 }
+td.num .warmup-score {
+  text-align: center;
+}
 .warmup-score-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+td.num .warmup-score-head {
+  display: block;
+}
+td.num .warmup-score-head b {
+  display: block;
 }
 .warmup-score-head strong {
   color: var(--accent);
