@@ -31,6 +31,8 @@ const escape = (s) =>
         c
       ],
   );
+const icon = (name) =>
+  `<span class="ui-icon ui-icon-${name}" aria-hidden="true"></span>`;
 const labels = {
   connected: "Подключён",
   unverified: "Не проверен",
@@ -129,18 +131,18 @@ function options(items, value, key = "id", label = "name") {
 }
 function shell(body) {
   root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="logo">dmailio</div><div class="subtle">Аутрич для вашей команды</div><nav>${[
-    ["campaigns", "Кампании"],
-    ["inbox", "Инбокс"],
-    ["analytics", "Аналитика"],
-    ["mailboxes", "Почты"],
+    ["campaigns", "Кампании", "bullhorn"],
+    ["inbox", "Инбокс", "inbox"],
+    ["analytics", "Аналитика", "chart-bar"],
+    ["mailboxes", "Почты", "envelope"],
   ]
     .map(
-      ([id, name]) =>
-        `<button data-nav="${id}" class="${page === id ? "active" : ""}">${name}</button>`,
+      ([id, name, glyph]) =>
+        `<button data-nav="${id}" class="${page === id ? "active" : ""}">${icon(glyph)}${name}</button>`,
     )
     .join(
       "",
-    )}</nav><div class="font-picker"><span>Шрифт интерфейса</span><div class="font-picker-options" role="group" aria-label="Шрифт интерфейса"><button type="button" data-font-choice="onest" aria-pressed="${uiFont === "onest"}">Onest</button><button type="button" data-font-choice="inter" aria-pressed="${uiFont === "inter"}">Inter</button></div></div><footer><p>Письма, которые становятся диалогами.</p><button id="logout">Выйти</button></footer></aside><main class="content">${body}</main></div>`;
+    )}</nav><div class="font-picker"><span>Шрифт интерфейса</span><div class="font-picker-options" role="group" aria-label="Шрифт интерфейса"><button type="button" data-font-choice="onest" aria-pressed="${uiFont === "onest"}">Onest</button><button type="button" data-font-choice="inter" aria-pressed="${uiFont === "inter"}">Inter</button></div></div><footer><p>Письма, которые становятся диалогами.</p><button id="logout">${icon("right-from-bracket")}Выйти</button></footer></aside><main class="content">${body}</main></div>`;
   root.querySelectorAll("[data-font-choice]").forEach((button) => {
     button.onclick = () => setUiFont(button.dataset.fontChoice);
   });
@@ -180,7 +182,7 @@ async function refresh() {
 }
 function campaigns() {
   shell(
-    `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary">+ Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${badge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
+    `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${badge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
   );
   click("new", () => {
     current = {
@@ -477,12 +479,12 @@ function mailboxes() {
       )
     : 0;
   shell(
-    `<div class="top"><div><h1>Почты</h1><p class="hint">Подключения, прогрев и техническое состояние ящиков</p></div><button id="add-mailbox" class="primary">+ Подключить почту</button></div>${
+    `<div class="top"><div><h1>Почты</h1><p class="hint">Подключения, прогрев и техническое состояние ящиков</p></div><button id="add-mailbox" class="primary icon-button">${icon("plus")}Подключить почту</button></div>${
       state.mailboxes.length
         ? `<div class="mailbox-summary" aria-label="Сводка по почтам"><div><span>Всего ящиков</span><strong>${state.mailboxes.length}</strong></div><div><span>Прогрев включён</span><strong>${warmupRows}</strong></div><div><span>Средний прогрев</span><strong>${averageWarmup}%</strong></div></div><div class="alert warmup-note"><strong>Автопрогрев</strong> рассчитан на 14 активных дней: Dmailio сам плавно увеличивает объём с 2 до 10 писем в день. Процент учитывает активные дни, выполнение плана, успешную отправку и получение писем. Это ориентир готовности, а не гарантия попадания во входящие.</div><section class="mailbox-panel"><div class="mailbox-toolbar"><label class="mailbox-search">Поиск<input id="mailbox-search" type="search" placeholder="Имя или адрес почты"></label><div class="bulk-actions"><span id="selected-count">Ничего не выбрано</span><button id="bulk-start" class="primary" disabled>Включить прогрев</button><button id="bulk-pause" disabled>Поставить на паузу</button></div></div><div class="table-scroll"><table class="mailbox-table"><thead><tr><th class="select-cell"><input id="select-all-mailboxes" type="checkbox" aria-label="Выбрать все почты"></th><th class="switch-cell">Прогрев</th><th>Ящик</th><th class="num">Прогрето</th><th class="num">Отправлено</th><th class="num">Ответы</th><th class="num">Здоровье</th><th>Действия</th></tr></thead><tbody>${state.mailboxes
             .map(
               (m) =>
-                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td class="switch-cell"><label class="switch" title="${!m.verified ? "Сначала проверьте почту" : !m.enabled ? "Ящик отключён" : "Включить или приостановить прогрев"}"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-mailbox-detail="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td class="num"><button class="warmup-score" data-mailbox-detail="${m.id}" aria-label="${escape(m.email)} прогрет на ${m.warmupProgress.score} процентов"><span class="warmup-score-head"><strong>${m.warmupProgress.score}%</strong><b>${escape(m.warmupProgress.label)}</b></span><span class="progress"><span style="width:${m.warmupProgress.score}%"></span></span><small>${m.warmupStatus === "warming" ? `день ${m.warmupProgress.day} из 14 · ${m.currentWarmupLimit} ${mailWord(m.currentWarmupLimit)}/день` : escape(labels[m.warmupStatus] || m.warmupStatus)}</small>${m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td class="num"><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td class="num"><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td class="num"><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-mailbox-detail="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}">Подпись</button><button data-mailbox-settings="${m.id}">Настройки</button><button data-verify="${m.id}">${m.verified ? "Перепроверить" : "Проверить"}</button></div></td></tr>`,
+                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td class="switch-cell"><label class="switch" title="${!m.verified ? "Сначала проверьте почту" : !m.enabled ? "Ящик отключён" : "Включить или приостановить прогрев"}"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-mailbox-detail="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td class="num"><button class="warmup-score" data-mailbox-detail="${m.id}" aria-label="${escape(m.email)} прогрет на ${m.warmupProgress.score} процентов"><span class="warmup-score-head"><strong>${m.warmupProgress.score}%</strong><b>${escape(m.warmupProgress.label)}</b></span><span class="progress"><span style="width:${m.warmupProgress.score}%"></span></span><small>${m.warmupStatus === "warming" ? `день ${m.warmupProgress.day} из 14 · ${m.currentWarmupLimit} ${mailWord(m.currentWarmupLimit)}/день` : escape(labels[m.warmupStatus] || m.warmupStatus)}</small>${m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td class="num"><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td class="num"><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td class="num"><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-mailbox-detail="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}" class="icon-button">${icon("signature")}Подпись</button><button data-mailbox-settings="${m.id}" class="icon-button">${icon("gear")}Настройки</button><button data-verify="${m.id}" class="icon-button">${icon("circle-check")}${m.verified ? "Перепроверить" : "Проверить"}</button></div></td></tr>`,
             )
             .join("")}</tbody></table></div></section>`
         : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'
@@ -1072,15 +1074,15 @@ async function showThread(t) {
 }
 function analyticsBody(a) {
   return `<div class="metrics">${[
-    ["Связались", a.contacted],
-    ["Отправлено", a.sent],
-    ["Ответили", a.replies],
-    ["Открытия", a.opens],
-    ["Недоставки", a.bounces],
+    ["Связались", a.contacted, "address-book"],
+    ["Отправлено", a.sent, "paper-plane"],
+    ["Ответили", a.replies, "comments"],
+    ["Открытия", a.opens, "eye"],
+    ["Недоставки", a.bounces, "triangle-exclamation"],
   ]
     .map(
-      ([label, n]) =>
-        `<div class="metric"><span class="hint">${label}</span><strong>${n}</strong></div>`,
+      ([label, n, glyph]) =>
+        `<div class="metric"><div class="metric-label"><span class="hint">${label}</span>${icon(glyph)}</div><strong>${n}</strong></div>`,
     )
     .join(
       "",
@@ -1089,7 +1091,7 @@ function analyticsBody(a) {
 async function analytics() {
   const a = await api("/analytics?campaign=" + analyticsCampaign);
   shell(
-    `<div class="top"><h1>Аналитика</h1><div class="row"><select id="analytics-filter"><option value="">Все кампании</option>${options(state.campaigns, analyticsCampaign)}</select><button id="export">Экспорт JSON</button></div></div>${analyticsBody(a)}`,
+    `<div class="top"><h1>Аналитика</h1><div class="row"><select id="analytics-filter"><option value="">Все кампании</option>${options(state.campaigns, analyticsCampaign)}</select><button id="export" class="icon-button">${icon("file-export")}Экспорт JSON</button></div></div>${analyticsBody(a)}`,
   );
   document.querySelector("#analytics-filter").onchange = action(async (e) => {
     analyticsCampaign = e.target.value;

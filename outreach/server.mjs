@@ -328,6 +328,13 @@ export function createApp({
           200,
           "font/woff2",
         );
+      const icon = path.match(/^\/icons\/([a-z][a-z0-9-]*)\.svg$/);
+      if (icon && method === "GET")
+        return send(
+          await readFile(join(here, "public", "icons", `${icon[1]}.svg`)),
+          200,
+          "image/svg+xml",
+        );
       if (method === "GET" && ["/quill.js", "/quill.snow.css"].includes(path)) {
         const name = path.slice(1);
         return send(
