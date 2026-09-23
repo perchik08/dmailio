@@ -1199,6 +1199,10 @@ dialog:has(#signature-form) {
   width: 44px;
   text-align: center;
 }
+.mailbox-table .switch-cell {
+  width: 96px;
+  text-align: center;
+}
 .mailbox-name,
 .status-button,
 .warmup-score {
@@ -1290,48 +1294,73 @@ td.num .warmup-score-head b {
   white-space: nowrap;
 }
 .switch {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   position: relative;
-  width: 42px;
-  height: 24px;
+  width: 48px;
+  height: 28px;
   margin: 0;
+  cursor: pointer;
 }
 .switch input {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
+  cursor: inherit;
 }
 .switch span {
   display: block;
   width: 100%;
   height: 100%;
   border-radius: 999px;
-  background: #dfe3ec;
-  transition: background 0.18s ease;
+  border: 1px solid #aeb8c9;
+  background: #cbd2df;
+  box-shadow: inset 0 1px 2px #29304a1a;
+  transition: background 0.18s ease, border-color 0.18s ease;
 }
 .switch span::after {
   content: "";
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   margin: 3px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 4px #29304a35;
+  box-shadow: 0 1px 4px #29304a40;
   transition: transform 0.18s ease;
 }
 .switch input:checked + span {
   background: var(--accent);
+  border-color: var(--accent);
 }
 .switch input:checked + span::after {
-  transform: translateX(18px);
+  transform: translateX(20px);
 }
 .switch input:focus-visible + span {
   outline: 3px solid #a0a7ff;
   outline-offset: 2px;
 }
-.switch input:disabled + span {
-  opacity: 0.55;
+.switch input:disabled {
   cursor: not-allowed;
+}
+.switch input:disabled + span {
+  background: #e5e9f0;
+  border-color: #c7cfda;
+  cursor: not-allowed;
+}
+.switch input:disabled + span::after {
+  background: #a7b1c1;
+  box-shadow: none;
+}
+.switch input:disabled:checked + span {
+  background: #b8bef5;
+  border-color: #aab2ec;
+}
+.switch input:disabled:checked + span::after {
+  background: #fff;
 }
 .health-score {
   min-width: 72px;
