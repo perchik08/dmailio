@@ -47,3 +47,12 @@ final result: passed
 - Server tests verify safe HTML rendering and local Quill assets; the full Node test suite and Prettier check pass.
 
 final result: passed
+
+## Interface typography, 2026-09-23
+
+- Compared Onest and Inter on the same Dmailio campaign screen. Both local variable fonts rendered Cyrillic and Latin; the sidebar switch changed the computed UI family without altering layout or campaign data.
+- The selected family persisted after a browser reload. The email editor body kept Arial while its toolbar followed the UI family.
+- A 390 px viewport initially exposed an existing min-content overflow in the campaign editor. The mobile grid now uses `minmax(0, 1fr)`; the page and content both fit 390 px, while the rich-text toolbar remains internally scrollable.
+- All four local WOFF2 font endpoints returned 200 with font content. Node tests and Prettier checks passed.
+
+final result: passed

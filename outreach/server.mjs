@@ -310,6 +310,24 @@ export function createApp({
       }
       if (path.startsWith("/api/"))
         return send({ error: "Метод не найден" }, 404);
+      const font = path.match(
+        /^\/fonts\/(onest|inter)-(latin|cyrillic)\.woff2$/,
+      );
+      if (font && method === "GET")
+        return send(
+          await readFile(
+            join(
+              here,
+              "node_modules",
+              "@fontsource-variable",
+              font[1],
+              "files",
+              `${font[1]}-${font[2]}-wght-normal.woff2`,
+            ),
+          ),
+          200,
+          "font/woff2",
+        );
       if (method === "GET" && ["/quill.js", "/quill.snow.css"].includes(path)) {
         const name = path.slice(1);
         return send(

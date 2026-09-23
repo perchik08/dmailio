@@ -1,5 +1,28 @@
 import { mountEditor } from "/editor.js";
 const root = document.querySelector("#app");
+const fontKey = "dmailio-ui-font";
+let uiFont = "onest";
+try {
+  if (localStorage.getItem(fontKey) === "inter") uiFont = "inter";
+} catch {
+  // Browser storage can be disabled; the font switch still works for this visit.
+}
+function setUiFont(value) {
+  uiFont = value === "inter" ? "inter" : "onest";
+  document.documentElement.dataset.uiFont = uiFont;
+  try {
+    localStorage.setItem(fontKey, uiFont);
+  } catch {
+    // Keep the in-memory choice when browser storage is unavailable.
+  }
+  root.querySelectorAll("[data-font-choice]").forEach((button) => {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.fontChoice === uiFont),
+    );
+  });
+}
+setUiFont(uiFont);
 const escape = (s) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -117,7 +140,10 @@ function shell(body) {
     )
     .join(
       "",
-    )}</nav><footer><p>Письма, которые становятся диалогами.</p><button id="logout">Выйти</button></footer></aside><main class="content">${body}</main></div>`;
+    )}</nav><div class="font-picker"><span>Шрифт интерфейса</span><div class="font-picker-options" role="group" aria-label="Шрифт интерфейса"><button type="button" data-font-choice="onest" aria-pressed="${uiFont === "onest"}">Onest</button><button type="button" data-font-choice="inter" aria-pressed="${uiFont === "inter"}">Inter</button></div></div><footer><p>Письма, которые становятся диалогами.</p><button id="logout">Выйти</button></footer></aside><main class="content">${body}</main></div>`;
+  root.querySelectorAll("[data-font-choice]").forEach((button) => {
+    button.onclick = () => setUiFont(button.dataset.fontChoice);
+  });
   document.querySelectorAll("[data-nav]").forEach(
     (b) =>
       (b.onclick = action(async () => {

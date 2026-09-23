@@ -21,6 +21,14 @@ test("API requires login, same-origin writes and excludes credentials", async ()
     assert.equal(stylesheet.status, 200);
     assert.match(script.headers.get("content-type"), /javascript/);
     assert.match(stylesheet.headers.get("content-type"), /css/);
+    for (const family of ["onest", "inter"]) {
+      for (const subset of ["latin", "cyrillic"]) {
+        const font = await fetch(base + `/fonts/${family}-${subset}.woff2`);
+        assert.equal(font.status, 200);
+        assert.match(font.headers.get("content-type"), /font\/woff2/);
+        assert.ok((await font.arrayBuffer()).byteLength > 1000);
+      }
+    }
     assert.equal((await fetch(base + "/api/mailboxes")).status, 401);
     assert.equal(
       (
