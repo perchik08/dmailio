@@ -1082,7 +1082,7 @@ function analyticsBody(a) {
   ]
     .map(
       ([label, n, glyph]) =>
-        `<div class="metric"><div class="metric-label"><span class="hint">${label}</span>${icon(glyph)}</div><strong>${n}</strong></div>`,
+        `<div class="metric"><div class="metric-label">${icon(glyph)}<span class="hint">${label}</span></div><strong>${n}</strong></div>`,
     )
     .join(
       "",
