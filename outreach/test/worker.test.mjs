@@ -161,3 +161,57 @@ test("warmup recipient receives initial message and sends a single threaded repl
   assert.equal(s.analytics().sent, 0);
   s.close();
 });
+test("warmup follows a selected scenario through multiple threaded messages", () => {
+  const { s, m } = setup();
+  const peer = s.saveMailbox({
+    email: "scenario-peer@other.example",
+    name: "Peer",
+    limit: 10,
+    smtp: { host: "smtp.example.com", port: 465, password: "x" },
+    imap: { host: "imap.example.com", port: 993, password: "x" },
+  });
+  for (const item of [m, peer]) {
+    s.markMailbox(item.id, true);
+    s.warmup(item.id, { enabled: true, consent: true }, 1000);
+  }
+  const healthy = new Set([m.id, peer.id]);
+  let now = Date.now();
+  let outgoing = s.reserveWarmup(now, healthy);
+  assert.ok(outgoing.scenario_id);
+  const scenarioId = outgoing.scenario_id;
+  let steps = 0;
+  while (outgoing && steps < 3) {
+    s.finish(outgoing.id, "sent", now);
+    const recipient = s
+      .mailboxes()
+      .find((item) => item.email === outgoing.recipient);
+    const source = s.mailbox(outgoing.mailbox_id);
+    const inbound = s.ingest(
+      recipient.id,
+      {
+        remoteId: `scenario-${steps}`,
+        messageId: outgoing.message_id,
+        references: [],
+        from: source.email,
+        subject: outgoing.subject,
+        text: outgoing.body,
+        type: "reply",
+      },
+      now + 100,
+    );
+    assert.ok(inbound);
+    now += 3600000;
+    const next = s.reserveWarmup(now, healthy);
+    if (!next) break;
+    if (next.scenario_id !== scenarioId) break;
+    assert.equal(next.scenario_id, scenarioId);
+    assert.equal(
+      Number(next.scenario_step),
+      Number(outgoing.scenario_step) + 1,
+    );
+    outgoing = next;
+    steps += 1;
+  }
+  assert.ok(steps >= 1);
+  s.close();
+});

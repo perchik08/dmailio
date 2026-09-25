@@ -14,6 +14,11 @@ import {
   defaultSchedule,
   inWindow,
 } from "./core.mjs";
+import {
+  loadWarmupScenarios,
+  pickWarmupScenario,
+  renderWarmupText,
+} from "./warmup-scenarios.mjs";
 
 const json = JSON.stringify;
 const warmupProviders = ["google", "yandex", "mailru", "other"];
@@ -84,6 +89,15 @@ export class Store {
         this.db.exec(
           `ALTER TABLE messages ADD COLUMN ${name} TEXT NOT NULL DEFAULT '${value}'`,
         );
+    for (const name of [
+      "scenario_id",
+      "scenario_step",
+      "scenario_pair",
+      "scenario_source_role",
+    ])
+      if (!columns.has(name))
+        this.db.exec(`ALTER TABLE messages ADD COLUMN ${name} TEXT`);
+    this.warmupScenarios = loadWarmupScenarios();
   }
   close() {
     this.db.close();
@@ -755,13 +769,54 @@ export class Store {
       )
       .get(mid, now - 86400000).n;
   }
+  warmupPairKey(first, second) {
+    return [first.id, second.id].sort().join(":");
+  }
+  warmupScenarioVariables(source, target) {
+    return {
+      sender_first_name: source.name || "Коллега",
+      recipient_first_name: target.name || "Коллега",
+      project: "текущему проекту",
+      document: "рабочему документу",
+      meeting_time: "11:00",
+      deadline: "завтра",
+      company: "команде",
+      event: "командном мероприятии",
+    };
+  }
+  warmupScenarioForPair(pairKey) {
+    const used = new Set(
+      this.db
+        .prepare(
+          "SELECT DISTINCT scenario_id FROM messages WHERE kind='warmup' AND scenario_pair=? AND scenario_id IS NOT NULL",
+        )
+        .all(pairKey)
+        .map((row) => row.scenario_id),
+    );
+    return pickWarmupScenario(
+      this.warmupScenarios,
+      used,
+      `${pairKey}:${used.size}`,
+    );
+  }
+  warmupScenarioMessage(scenario, step, sourceRole, source, target) {
+    const template = scenario.messages[step];
+    if (!template || template.from !== sourceRole) return null;
+    const sender = sourceRole === "sender" ? source : target;
+    const recipient = sourceRole === "sender" ? target : source;
+    const variables = this.warmupScenarioVariables(sender, recipient);
+    return {
+      subject: renderWarmupText(template.subject, variables),
+      body: renderWarmupText(template.body, variables),
+    };
+  }
   insertMessage(v, now) {
     const id = randomUUID();
     const m = this.mailbox(v.mailbox_id);
     const messageId = `<${id}@${m.email.split("@")[1]}>`;
     this.db
       .prepare(
-        `INSERT INTO messages(id,message_id,mailbox_id,campaign_id,lead_id,step,kind,direction,status,recipient,subject,body,parent,created,token,format,signature,signature_format,signature_marker) VALUES(?,?,?,?,?,?,?,'out','sending',?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO messages(id,message_id,mailbox_id,campaign_id,lead_id,step,kind,direction,status,recipient,subject,body,parent,created,token,format,signature,signature_format,signature_marker,scenario_id,scenario_step,scenario_pair,scenario_source_role) VALUES(?,?,?,?,?,?,?,'out','sending',?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         id,
@@ -781,6 +836,10 @@ export class Store {
         v.signature || "",
         v.signature_format || "plain",
         v.signature_marker || "",
+        v.scenario_id || null,
+        v.scenario_step ?? null,
+        v.scenario_pair || null,
+        v.scenario_source_role || null,
       );
     return this.message(id);
   }
@@ -934,7 +993,7 @@ export class Store {
           const id = randomUUID();
           this.db
             .prepare(
-              `INSERT OR IGNORE INTO messages(id,message_id,mailbox_id,kind,direction,status,recipient,subject,body,parent,created,remote_id,token) VALUES(?,?,?,'warmup','in','received',?,?,?,?,?,?,?)`,
+              `INSERT OR IGNORE INTO messages(id,message_id,mailbox_id,kind,direction,status,recipient,subject,body,parent,created,remote_id,token,scenario_id,scenario_step,scenario_pair,scenario_source_role) VALUES(?,?,?,'warmup','in','received',?,?,?,?,?,?,?,?,?,?,?)`,
             )
             .run(
               id,
@@ -947,6 +1006,10 @@ export class Store {
               now,
               inbound.remoteId,
               randomBytes(24).toString("hex"),
+              warm.scenario_id,
+              warm.scenario_step,
+              warm.scenario_pair,
+              warm.scenario_source_role,
             );
           return this.message(id);
         }
@@ -963,7 +1026,7 @@ export class Store {
       const id = randomUUID();
       this.db
         .prepare(
-          `INSERT OR IGNORE INTO messages(id,message_id,mailbox_id,campaign_id,lead_id,kind,direction,status,recipient,subject,body,parent,created,remote_id,token) VALUES(?,?,?,?,?,?,'in','received',?,?,?,?,?,?,?)`,
+          `INSERT OR IGNORE INTO messages(id,message_id,mailbox_id,campaign_id,lead_id,kind,direction,status,recipient,subject,body,parent,created,remote_id,token,scenario_id,scenario_step,scenario_pair,scenario_source_role) VALUES(?,?,?,?,?,?,'in','received',?,?,?,?,?,?,?,?,?,?,?)`,
         )
         .run(
           id,
@@ -979,6 +1042,10 @@ export class Store {
           now,
           inbound.remoteId,
           randomBytes(24).toString("hex"),
+          original.scenario_id,
+          original.scenario_step,
+          original.scenario_pair,
+          original.scenario_source_role,
         );
       if (original.lead_id && ["reply", "bounce"].includes(kind)) {
         this.db
@@ -1406,7 +1473,7 @@ export class Store {
       };
       const waiting = this.db
         .prepare(
-          "SELECT * FROM messages i WHERE i.kind='warmup' AND i.direction='in' AND i.parent IS NULL AND i.created<? AND NOT EXISTS(SELECT 1 FROM messages o WHERE o.direction='out' AND o.mailbox_id=i.mailbox_id AND o.parent=i.message_id)",
+          "SELECT * FROM messages i WHERE i.kind='warmup' AND i.direction='in' AND i.created<? AND NOT EXISTS(SELECT 1 FROM messages o WHERE o.direction='out' AND o.mailbox_id=i.mailbox_id AND o.parent=i.message_id)",
         )
         .all(now - 1800000);
       for (const incoming of waiting) {
@@ -1419,18 +1486,50 @@ export class Store {
           originalSender &&
           m.warmup.providers.includes(mailboxProvider(originalSender)) &&
           eligible(m)
-        )
+        ) {
+          const scenario = this.warmupScenarios.find(
+            (item) => item.id === incoming.scenario_id,
+          );
+          const sourceRole = incoming.scenario_source_role || "sender";
+          const nextStep = Number(incoming.scenario_step ?? 0) + 1;
+          const content = scenario
+            ? this.warmupScenarioMessage(
+                scenario,
+                nextStep,
+                scenario.messages[nextStep]?.from,
+                originalSender,
+                m,
+              )
+            : null;
+          if (content)
+            return this.insertMessage(
+              {
+                mailbox_id: m.id,
+                kind: "warmup",
+                recipient: incoming.recipient,
+                subject: content.subject,
+                body: content.body,
+                parent: incoming.message_id,
+                scenario_id: scenario.id,
+                scenario_step: nextStep,
+                scenario_pair: incoming.scenario_pair,
+                scenario_source_role: sourceRole,
+              },
+              now,
+            );
+          if (scenario) continue;
           return this.insertMessage(
             {
               mailbox_id: m.id,
               kind: "warmup",
               recipient: incoming.recipient,
               subject: `Re: ${incoming.subject}`,
-              body: "Контрольное письмо получено. Ответ из подключённого ящика Dmailio.",
+              body: "Спасибо, письмо получил. Вернусь с ответом после проверки.",
               parent: incoming.message_id,
             },
             now,
           );
+        }
       }
       for (const m of pool) {
         if (!eligible(m)) continue;
@@ -1442,13 +1541,26 @@ export class Store {
           )
           .sort((a, b) => this.load(a.id, now) - this.load(b.id, now))[0];
         if (!target) continue;
+        const pairKey = this.warmupPairKey(m, target);
+        const scenario = this.warmupScenarioForPair(pairKey);
+        const sourceRole = scenario?.messages[0]?.from || "sender";
+        const content = scenario
+          ? this.warmupScenarioMessage(scenario, 0, sourceRole, m, target)
+          : null;
         return this.insertMessage(
           {
             mailbox_id: m.id,
             kind: "warmup",
             recipient: target.email,
-            subject: "Проверка почтового подключения Dmailio",
-            body: "Контрольное письмо между подключёнными участниками прогрева Dmailio. Проверяем получение и возможность ответа.",
+            subject:
+              content?.subject || "Проверка почтового подключения Dmailio",
+            body:
+              content?.body ||
+              "Контрольное письмо между подключёнными участниками прогрева Dmailio. Проверяем получение и возможность ответа.",
+            scenario_id: scenario?.id,
+            scenario_step: scenario ? 0 : null,
+            scenario_pair: scenario ? pairKey : null,
+            scenario_source_role: scenario ? sourceRole : null,
           },
           now,
         );
