@@ -1,0 +1,2093 @@
+[
+  {
+    "id": "warmup_scenario_001",
+    "category": "documents",
+    "situation": "Согласование порядка проверки договора перед подписанием",
+    "tone": "friendly_business",
+    "thread_subject": "Проверка договора по {{project}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Проверка договора по {{project}}",
+        "body": "Добрый день, {{recipient_first_name}}.\n\nПодготовил {{document}} с правками, которые мы обсудили на встрече. Посмотри, пожалуйста, раздел о сроках: там я уточнил порядок передачи результата и добавил время на проверку. Если формулировки подходят, отправлю документ на подписание. По остальным разделам изменений нет.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Проверка договора по {{project}}",
+        "body": "Добрый день. Раздел о сроках посмотрел, теперь порядок понятен. Перед отправкой на подписание поправь, пожалуйста, название этапа во втором пункте: оно отличается от согласованного. Больше замечаний у меня нет.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Проверка договора по {{project}}",
+        "body": "Исправил название этапа и ещё раз сверил его с планом работ. Актуальную версию документа отправил отдельным файлом в этом письме. Спасибо, что заметил расхождение.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "recipient_first_name",
+      "project",
+      "document"
+    ],
+    "uniqueness_key": "contract_stage_name_before_signature",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_002",
+    "category": "documents",
+    "situation": "Передача исправленной версии инструкции",
+    "tone": "neutral_business",
+    "thread_subject": "Правки в инструкции для команды",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Правки в инструкции для команды",
+        "body": "Коллега, обновил {{document}} после вчерашнего обсуждения. Теперь шаги идут в том порядке, в котором команда выполняет работу. Проверь, пожалуйста, последний раздел: я не уверен, достаточно ли ясно описал передачу задачи следующему исполнителю.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Правки в инструкции для команды",
+        "body": "Порядок стал понятнее. В последнем разделе я бы добавил, где отмечать завершение шага. Тогда у следующего исполнителя не возникнет вопроса, можно ли начинать работу.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 23
+      }
+    ],
+    "used_variables": [
+      "document"
+    ],
+    "uniqueness_key": "instruction_handoff_completion_marker",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_003",
+    "category": "meetings",
+    "situation": "Перенос короткой рабочей встречи из-за проверки материалов",
+    "tone": "friendly_business",
+    "thread_subject": "Сдвинем обсуждение макета",
+    "messages": [
+      {
+        "from": "recipient",
+        "subject": "Сдвинем обсуждение макета",
+        "body": "Слушай, я не успеваю внимательно пройтись по макету к сегодняшнему обсуждению. Можно перенести встречу на завтра? До конца дня оставлю замечания, чтобы мы уже говорили по конкретным пунктам.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Сдвинем обсуждение макета",
+        "body": "Да, давай завтра в {{meeting_time}}. Я пока соберу вопросы по двум спорным экранам и добавлю их в повестку. Если увидишь ещё что-то важное, пришли замечания сегодня, чтобы я успел подготовиться.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Сдвинем обсуждение макета",
+        "body": "Подходит. Замечания отправлю ближе к вечеру, основные вопросы уже выписал. Спасибо за перенос.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "meeting_time"
+    ],
+    "uniqueness_key": "mockup_review_postponed_for_comments",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_004",
+    "category": "project_coordination",
+    "situation": "Уточнение ответственного за обновление плана",
+    "tone": "neutral_business",
+    "thread_subject": "Кто обновляет план по {{project}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Кто обновляет план по {{project}}",
+        "body": "Подскажи, пожалуйста, кто сейчас собирает изменения для общего плана по {{project}}. После встречи появились два новых этапа, и я хочу передать их нужному человеку до завтрашнего синка.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Кто обновляет план по {{project}}",
+        "body": "План обновляю я. Пришли описание этапов и предполагаемые сроки, я внесу их в рабочую версию. Если по одному из них срок пока ориентировочный, так и отмечу.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 5
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Кто обновляет план по {{project}}",
+        "body": "Спасибо. Первый этап — проверка материалов, его рассчитываем закончить к {{deadline}}. Второй — сбор замечаний после проверки; точный срок пока зависит от объёма комментариев. Я добавил краткое описание обоих этапов в ответ ниже, чтобы тебе было удобно перенести его в план.",
+        "length": "medium",
+        "requires_reply": false,
+        "delay_hours_before": 21
+      }
+    ],
+    "used_variables": [
+      "project",
+      "deadline"
+    ],
+    "uniqueness_key": "ownership_of_project_plan_updates",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_005",
+    "category": "reporting",
+    "situation": "Проверка объяснения расхождения в отчёте",
+    "tone": "collaborative",
+    "thread_subject": "Пояснение к цифрам в отчёте",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Пояснение к цифрам в отчёте",
+        "body": "Доброе утро, {{recipient_first_name}}.\n\nВ сводке за прошлую неделю итог немного отличается от суммы по строкам. Я нашёл причину: один показатель округляется уже после объединения данных. Можешь посмотреть моё пояснение в {{document}}? Хочу убедиться, что человеку вне команды будет понятно, откуда взялась разница.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Пояснение к цифрам в отчёте",
+        "body": "Посмотрел. Причина описана верно, но лучше прямо назвать строку, в которой видно округление. Иначе читателю придётся искать её самому. Я оставил комментарий рядом с абзацем.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 6
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Пояснение к цифрам в отчёте",
+        "body": "Уточнение добавил. Теперь в пояснении названа нужная строка и указано, что итог считается до округления отдельных значений. Обновлённый отчёт отправлю команде после обеда.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "recipient_first_name",
+      "document"
+    ],
+    "uniqueness_key": "report_rounding_explanation",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_006",
+    "category": "materials",
+    "situation": "Подтверждение получения материалов для обсуждения",
+    "tone": "friendly_business",
+    "thread_subject": "Материалы к четверговому обсуждению",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Материалы к четверговому обсуждению",
+        "body": "Отправляю подборку материалов, о которой договорились на созвоне. В первом файле — текущий вариант структуры, во втором — замечания команды. Дай знать, пожалуйста, открываются ли оба файла: перед встречей хочу быть уверен, что мы смотрим одну версию.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Материалы к четверговому обсуждению",
+        "body": "Оба файла получил и открыл. Структуру посмотрю сегодня, а замечания пройду завтра утром. Если появятся вопросы до встречи, отвечу в этой переписке.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "two_meeting_files_receipt_confirmation",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_007",
+    "category": "scheduling",
+    "situation": "Согласование времени для демонстрации результата",
+    "tone": "neutral_business",
+    "thread_subject": "Показ промежуточного результата",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Показ промежуточного результата",
+        "body": "{{recipient_first_name}}, промежуточный вариант по {{project}} готов. Предлагаю показать его до общего обсуждения, чтобы заранее разобрать вопросы по содержанию. Мне удобно завтра после обеда или в первой половине следующего рабочего дня. Какой вариант тебе лучше подходит?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Показ промежуточного результата",
+        "body": "Завтра после обеда удобно. Давай в {{meeting_time}}. Если покажешь сначала основную логику, а потом открытые вопросы, мы уложимся в полчаса.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 24
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Показ промежуточного результата",
+        "body": "Договорились, начну с основной логики. Вопросы соберу на отдельной странице, чтобы не искать их во время разговора.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 1
+      }
+    ],
+    "used_variables": [
+      "recipient_first_name",
+      "project",
+      "meeting_time"
+    ],
+    "uniqueness_key": "preview_result_before_group_review",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_008",
+    "category": "feedback",
+    "situation": "Запрос комментариев к плану внутреннего обучения",
+    "tone": "collaborative",
+    "thread_subject": "План вводной встречи для команды",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "План вводной встречи для команды",
+        "body": "Добрый день.\n\nНабросал план вводной встречи для новых участников команды. Хочу пройти основные правила работы, затем показать, где лежат общие материалы, и оставить время на вопросы. Посмотри, пожалуйста, хватает ли здесь практической части. Ты проводил такую встречу в прошлом месяце и, возможно, помнишь, какие вопросы возникали чаще всего.\n\nЕсли есть пункты, которые лучше перенести в отдельную инструкцию, тоже отметь. Сейчас программа получается плотной, и я не хочу перегрузить первый разговор деталями.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: План вводной встречи для команды",
+        "body": "Я бы сократил обзор правил и добавил небольшой пример типовой задачи. На прошлой встрече именно после примера стало понятно, где искать материалы и кому задавать вопросы. Остальная последовательность хорошая.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 26
+      },
+      {
+        "from": "sender",
+        "subject": "Re: План вводной встречи для команды",
+        "body": "Хорошая мысль. Возьму обезличенный пример из прошлой недели и покажу его сразу после обзора материалов. Правила оставлю в коротком вступлении, а детали перенесу в памятку.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 3
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "onboarding_meeting_practical_example",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_009",
+    "category": "deadlines",
+    "situation": "Перенос срока из-за дополнительной проверки",
+    "tone": "neutral_business",
+    "thread_subject": "Срок по итоговой таблице",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Срок по итоговой таблице",
+        "body": "Предупреждаю заранее: для итоговой таблицы понадобилась ещё одна проверка исходных строк. Сегодня успею сверить данные, но аккуратно оформить выводы до конца дня уже не получится. Могу прислать готовую версию к {{deadline}}. Такой срок подходит для общего отчёта?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Срок по итоговой таблице",
+        "body": "Да, подходит. Для общего отчёта мне нужна проверенная таблица, поэтому лучше завершить сверку спокойно. Если обнаружится расхождение, напиши сразу, чтобы мы успели поправить пояснение.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Срок по итоговой таблице",
+        "body": "Сверку закончил. Одну повторяющуюся строку убрал, остальные значения совпадают с источником. Таблица готова, прикладываю обновлённый файл. В общем отчёте можно использовать итоги из последнего столбца.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 23
+      }
+    ],
+    "used_variables": [
+      "deadline"
+    ],
+    "uniqueness_key": "table_deadline_after_source_row_check",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_010",
+    "category": "events",
+    "situation": "Уточнение формата участия в командном мероприятии",
+    "tone": "friendly_business",
+    "thread_subject": "Формат участия в {{event}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Формат участия в {{event}}",
+        "body": "Доброе утро. Планирую участие команды в {{event}} и хочу уточнить формат. Ты будешь присутствовать весь день или только на общей части? От этого зависит, сколько времени оставить в программе для нашего обсуждения.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Формат участия в {{event}}",
+        "body": "Смогу быть на общей части и на обсуждении после перерыва. Во второй половине дня у меня уже запланирована другая рабочая встреча. Если наш вопрос поставить раньше, я успею в нём поучаствовать.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Формат участия в {{event}}",
+        "body": "Понял, поставлю наш вопрос сразу после перерыва. Когда программа будет окончательно собрана, пришлю тебе её для проверки.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "event"
+    ],
+    "uniqueness_key": "partial_attendance_affects_event_agenda",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitivе_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_011",
+    "category": "project_coordination",
+    "situation": "Уточнение порядка передачи задачи между командами",
+    "tone": "collaborative",
+    "thread_subject": "Передача задачи после проверки",
+    "messages": [
+      {
+        "from": "recipient",
+        "subject": "Передача задачи после проверки",
+        "body": "{{sender_first_name}}, подскажи, как сейчас лучше передавать задачу после вашей проверки. Раньше мы ждали отдельного письма с итогом, но на последней встрече обсуждали общий список. Хочу зафиксировать единый порядок, чтобы работа не зависала между этапами.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Передача задачи после проверки",
+        "body": "Давай использовать общий список как основной ориентир. Когда проверка закончена, я отмечаю в нём результат и указываю, есть ли замечания. Если замечания требуют обсуждения, дополнительно пишу тебе в этой переписке. Так у команды остаётся одна актуальная запись, а важный вопрос не теряется.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 5
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Передача задачи после проверки",
+        "body": "Подходит. Я передам этот порядок коллегам и попрошу их смотреть статус в общем списке перед началом следующего этапа.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "sender_first_name"
+    ],
+    "uniqueness_key": "handoff_rule_shared_status_list",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_012",
+    "category": "presentations",
+    "situation": "Проверка порядка слайдов перед внутренним выступлением",
+    "tone": "friendly_business",
+    "thread_subject": "Порядок слайдов для обзора",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Порядок слайдов для обзора",
+        "body": "Посмотри, пожалуйста, презентацию для внутреннего обзора. Я переставил слайды так, чтобы сначала показать проблему, затем решение и только потом детали процесса. Особенно интересует переход между вторым и третьим разделами: мне кажется, там не хватает короткого вывода.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Порядок слайдов для обзора",
+        "body": "Переход действительно резкий. Достаточно одного слайда с тремя выводами из первой части. Тогда детали процесса будут восприниматься как продолжение истории, а не как новая тема.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 24
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Порядок слайдов для обзора",
+        "body": "Добавил слайд с выводами и сократил подписи в следующем разделе. Теперь переход читается лучше. Обновлённую презентацию прикладываю, спасибо за точное замечание.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 4
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "presentation_bridge_slide_between_sections",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_013",
+    "category": "scheduling",
+    "situation": "Согласование короткого звонка по зависшему вопросу",
+    "tone": "direct_business",
+    "thread_subject": "Десять минут по открытому вопросу",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Десять минут по открытому вопросу",
+        "body": "Остался один открытый вопрос по распределению задач, и в переписке его сложно быстро закрыть. Есть десять минут сегодня после обеда? Покажу два варианта и сразу зафиксируем выбранный в плане.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Десять минут по открытому вопросу",
+        "body": "Сегодня после обеда могу в {{meeting_time}}. Пришли варианты до звонка, если они уже оформлены. Тогда начнём сразу с решения.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 2
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Десять минут по открытому вопросу",
+        "body": "Отправляю варианты текстом. В первом проверку берёт наша команда, во втором она остаётся у текущего исполнителя. Я склоняюсь к первому: так проще выдержать общий срок. На звонке обсудим, есть ли у тебя возражения.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 1
+      }
+    ],
+    "used_variables": [
+      "meeting_time"
+    ],
+    "uniqueness_key": "brief_call_to_assign_review_owner",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_014",
+    "category": "documents",
+    "situation": "Согласование окончательной версии памятки",
+    "tone": "neutral_business",
+    "thread_subject": "Финальная версия памятки",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Финальная версия памятки",
+        "body": "В {{document}} внесены все замечания после общего просмотра. Я убрал повторяющиеся пункты, уточнил названия разделов и добавил пример заполнения. Перед тем как отправить памятку команде, прошу подтвердить, что вводный абзац отражает согласованный порядок работы.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Финальная версия памятки",
+        "body": "Вводный абзац проверил. Порядок описан верно, можно отправлять. Пример заполнения тоже удачный: он снимает вопрос, который возникал у коллег на прошлой неделе.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 25
+      }
+    ],
+    "used_variables": [
+      "document"
+    ],
+    "uniqueness_key": "memo_intro_final_approval",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_015",
+    "category": "events",
+    "situation": "Выбор формата командного обсуждения на мероприятии",
+    "tone": "friendly_business",
+    "thread_subject": "Обсуждение на {{event}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Обсуждение на {{event}}",
+        "body": "Хочу согласовать формат нашей части на {{event}}. Сейчас в плане короткий обзор результатов и затем обсуждение в небольших группах. Мне кажется, для этой темы полезнее собрать вопросы заранее и разобрать их вместе. Как тебе такой вариант?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Обсуждение на {{event}}",
+        "body": "Согласен, общая дискуссия здесь лучше. В группах мы потратим время на повторение одного и того же. Я могу собрать вопросы своей команды и прислать их завтра к обеду.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 6
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Обсуждение на {{event}}",
+        "body": "Отлично. Я соберу вопросы остальных участников и сгруппирую их по темам. Тогда на встрече начнём с самого частого вопроса.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "event"
+    ],
+    "uniqueness_key": "event_discussion_format_from_precollected_questions",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_016",
+    "category": "calculations",
+    "situation": "Проверка методики подсчёта рабочих дней",
+    "tone": "collaborative",
+    "thread_subject": "Расчёт срока для этапа проверки",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Расчёт срока для этапа проверки",
+        "body": "Добрый день. В плане для этапа проверки у меня получилось четыре рабочих дня, а в заметках со встречи записано пять. Похоже, я не учёл время на повторный просмотр после правок. Посмотри, пожалуйста, как мы договаривались считать этот этап, прежде чем я обновлю расписание.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Расчёт срока для этапа проверки",
+        "body": "Да, пятый день оставляли на повторный просмотр. Саму первую проверку планировали на четыре дня. В расписании лучше показать эти шаги отдельно, тогда будет видно, почему общий срок длиннее.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Расчёт срока для этапа проверки",
+        "body": "Разделил этап на первую проверку и повторный просмотр. Общий срок теперь совпадает с договорённостью. Спасибо, что подтвердил.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "review_duration_includes_second_pass",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_017",
+    "category": "meetings",
+    "situation": "Подведение итогов встречи с распределением действий",
+    "tone": "neutral_business",
+    "thread_subject": "Итоги сегодняшнего обсуждения",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Итоги сегодняшнего обсуждения",
+        "body": "Коротко зафиксирую договорённости после встречи. Я обновляю структуру документа и отмечаю вопросы, по которым нам ещё нужно решение. Ты проверяешь примеры во втором разделе и присылаешь замечания до {{deadline}}. После этого соберём одну версию для общего просмотра.\n\nЕсли я пропустил какой-то пункт, поправь меня в ответе.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Итоги сегодняшнего обсуждения",
+        "body": "Всё верно. Добавлю только, что для второго раздела нужны два примера, а не один. Остальные действия и срок совпадают с моими записями.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "deadline"
+    ],
+    "uniqueness_key": "meeting_recap_corrects_example_count",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_018",
+    "category": "contacts",
+    "situation": "Передача рабочего контакта через представление в переписке",
+    "tone": "friendly_business",
+    "thread_subject": "К кому обратиться по расписанию",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "К кому обратиться по расписанию",
+        "body": "Подскажи, кто сейчас помогает согласовывать расписание общих встреч. Нужно перенести одно обсуждение, а прежний порядок, кажется, изменился. Не хочу отправлять запрос не тому человеку.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: К кому обратиться по расписанию",
+        "body": "Сейчас расписание собирает координатор команды. Я перешлю ему твой вопрос и представлю вас в отдельной рабочей переписке. Напиши мне, пожалуйста, желаемый день и примерную продолжительность встречи.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: К кому обратиться по расписанию",
+        "body": "Спасибо. Встречу хотим провести в первой половине следующей недели, на неё понадобится около сорока минут. Точный день можем подстроить под общий календарь.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "introduce_schedule_coordinator_without_contact_details",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_019",
+    "category": "project_coordination",
+    "situation": "Выбор следующего шага после завершения черновика",
+    "tone": "collaborative",
+    "thread_subject": "Что делаем после черновика",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Что делаем после черновика",
+        "body": "Черновик по {{project}} собран. Есть два возможных следующих шага: сначала показать его небольшой рабочей группе или сразу вынести на общий просмотр. Я бы начал с рабочей группы, потому что в третьем разделе ещё нужно проверить последовательность действий. Как ты считаешь?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Что делаем после черновика",
+        "body": "Поддерживаю рабочую группу. Общий просмотр будет полезнее, когда порядок в третьем разделе уже не вызывает вопросов. Я могу посмотреть его завтра и отдельно выписать места, где последовательность кажется спорной.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 22
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Что делаем после черновика",
+        "body": "Тогда сначала соберём замечания рабочей группы. Я отмечу спорные шаги прямо в черновике, чтобы тебе было проще их найти.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 1
+      }
+    ],
+    "used_variables": [
+      "project"
+    ],
+    "uniqueness_key": "draft_review_sequence_small_group_first",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_020",
+    "category": "reporting",
+    "situation": "Уточнение периода для недельной сводки",
+    "tone": "neutral_business",
+    "thread_subject": "Период в недельной сводке",
+    "messages": [
+      {
+        "from": "recipient",
+        "subject": "Период в недельной сводке",
+        "body": "Вижу, что в новой сводке период указан по рабочим дням, а в прошлой версии — по календарной неделе. Какой вариант теперь считаем основным? Хочу одинаково подписать таблицы перед общим обсуждением.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Период в недельной сводке",
+        "body": "Основным оставляем период по календарной неделе. В новой сводке я неудачно подписал заголовок: данные включают и выходные. Поправлю название столбца и пришлю обновлённую таблицу.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Период в недельной сводке",
+        "body": "Заголовок исправил, обновлённую таблицу прикладываю. Теперь период подписан одинаково во всех листах.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "weekly_report_calendar_period_header",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_021",
+    "category": "documents",
+    "situation": "Проверка единообразия терминов в рабочем документе",
+    "tone": "direct_business",
+    "thread_subject": "Термины в описании процесса",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Термины в описании процесса",
+        "body": "В {{document}} встречаются два названия одного и того же шага: «первичная проверка» и «начальный просмотр». Думаю оставить первый вариант во всех разделах. Подтверди, пожалуйста, что команда использует именно его.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Термины в описании процесса",
+        "body": "Да, используем «первичная проверка». Так этот шаг называется в нашем рабочем плане. Второй вариант можно убрать, чтобы не возникало впечатления, что это разные действия.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 5
+      }
+    ],
+    "used_variables": [
+      "document"
+    ],
+    "uniqueness_key": "process_document_term_consistency",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_022",
+    "category": "events",
+    "situation": "Подтверждение участия в обсуждении после мероприятия",
+    "tone": "friendly_business",
+    "thread_subject": "Обсуждение после {{event}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Обсуждение после {{event}}",
+        "body": "После {{event}} хотим провести короткий разговор с командой: собрать полезные выводы и решить, какие идеи стоит попробовать в работе. Сможешь присоединиться? Твой взгляд пригодится по части организации процесса.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Обсуждение после {{event}}",
+        "body": "Да, присоединюсь. Я уже отметил два подхода, которые можно проверить на нашем текущем проекте. До встречи оформлю их кратко, чтобы разговор получился предметным.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 24
+      }
+    ],
+    "used_variables": [
+      "event"
+    ],
+    "uniqueness_key": "post_event_team_takeaways_participation",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_023",
+    "category": "materials",
+    "situation": "Запрос недостающей схемы для общего комплекта материалов",
+    "tone": "neutral_business",
+    "thread_subject": "Схема для общего комплекта",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Схема для общего комплекта",
+        "body": "Собираю материалы для внутреннего обсуждения и не нашёл схему, которую мы показывали на прошлой встрече. У тебя осталась актуальная версия? Если да, пришли её, пожалуйста, отдельным файлом. В комплекте пока лежит ранний вариант без последнего этапа.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Схема для общего комплекта",
+        "body": "Актуальная схема у меня есть. Прикладываю файл; в нём добавлен последний этап и исправлены подписи двух переходов. Ранний вариант можно убрать из комплекта.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Схема для общего комплекта",
+        "body": "Получил, спасибо. Заменил схему в общем комплекте и проверил, что подписи совпадают с текстовым описанием.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 1
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "replace_outdated_process_diagram",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_024",
+    "category": "meetings",
+    "situation": "Уточнение повестки еженедельного синка",
+    "tone": "collaborative",
+    "thread_subject": "Повестка ближайшего синка",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Повестка ближайшего синка",
+        "body": "Добрый день, {{recipient_first_name}}.\n\nНа ближайшем синке предлагаю разобрать три вопроса: готовность материалов, замечания к плану и следующий этап по {{project}}. По срокам пока нет новых рисков, поэтому отдельный блок для них не ставил. Есть ли у тебя тема, которую стоит добавить заранее?\n\nХочу разослать повестку сегодня, чтобы у участников было время подготовить конкретные ответы. Если вопросов много, можем часть перенести в отдельный разговор.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Повестка ближайшего синка",
+        "body": "Добавь, пожалуйста, вопрос о порядке согласования финальной версии. Сейчас не все понимают, кто даёт последнее подтверждение. На это должно хватить пяти минут.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 5
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Повестка ближайшего синка",
+        "body": "Добавил этот пункт после обсуждения замечаний. Повестку отправил участникам и попросил заранее выписать вопросы по согласованию.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "recipient_first_name",
+      "project"
+    ],
+    "uniqueness_key": "weekly_sync_agenda_adds_final_approver",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_025",
+    "category": "deadlines",
+    "situation": "Напоминание о согласованном сроке без давления",
+    "tone": "friendly_business",
+    "thread_subject": "Замечания к черновику до {{deadline}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Замечания к черновику до {{deadline}}",
+        "body": "Напомню про замечания к черновику: мы договорились собрать их до {{deadline}}. Мне важно понять, есть ли крупные изменения, чтобы запланировать доработку. Если ты ещё смотришь материал, достаточно коротко написать, когда ждать комментарии.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Замечания к черновику до {{deadline}}",
+        "body": "Помню. Основную часть посмотрел, крупных изменений не вижу. Осталось проверить примеры в конце; пришлю все комментарии одним письмом завтра утром.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Замечания к черновику до {{deadline}}",
+        "body": "Хорошо, тогда до завтра. Пока подготовлю правки по тем пунктам, которые уже обсуждали устно.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 1
+      }
+    ],
+    "used_variables": [
+      "deadline"
+    ],
+    "uniqueness_key": "draft_comments_status_before_deadline",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_026",
+    "category": "project_coordination",
+    "situation": "Уточнение статуса задачи после тестового прохода",
+    "tone": "direct_business",
+    "thread_subject": "Статус проверки сценария",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Статус проверки сценария",
+        "body": "Как прошёл вчерашний тестовый проход? В плане задача ещё отмечена как открытая. Мне нужно понять, можно ли переходить к оформлению инструкции или сначала потребуется исправить сам сценарий.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Статус проверки сценария",
+        "body": "Проход завершили. Основной сценарий работает, но нашли один неясный шаг в конце. Я сегодня уточню формулировку с командой и обновлю статус. Инструкцию пока можно готовить без этого абзаца.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Статус проверки сценария",
+        "body": "Принял. Подготовлю основную часть инструкции, а заключительный шаг добавлю после твоего уточнения.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "test_pass_complete_except_final_step",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_027",
+    "category": "documents",
+    "situation": "Согласование названия нового раздела документа",
+    "tone": "collaborative",
+    "thread_subject": "Название раздела в {{document}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Название раздела в {{document}}",
+        "body": "В {{document}} появился раздел о проверке результата. Сейчас он называется «Контроль качества», но содержание скорее про порядок внутреннего просмотра. Мне кажется, название обещает больше, чем там описано. Какой вариант будет точнее для коллег?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Название раздела в {{document}}",
+        "body": "Я бы назвал его «Порядок проверки результата». Это соответствует содержанию и не создаёт впечатления, что в разделе перечислены все критерии качества. Первый абзац тогда тоже стоит немного сократить.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 25
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Название раздела в {{document}}",
+        "body": "Название заменил, первый абзац сократил до двух предложений. Теперь раздел начинается сразу с последовательности действий. Спасибо за вариант.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "document"
+    ],
+    "uniqueness_key": "rename_document_section_to_match_scope",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_028",
+    "category": "scheduling",
+    "situation": "Перестановка двух пунктов в расписании общего дня",
+    "tone": "neutral_business",
+    "thread_subject": "Порядок выступлений в расписании",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Порядок выступлений в расписании",
+        "body": "В расписании общего дня наш обзор стоит перед демонстрацией. Для участников логичнее сначала увидеть результат, а потом услышать выводы. Можно поменять эти два пункта местами? По продолжительности ничего не меняется.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Порядок выступлений в расписании",
+        "body": "Да, такая последовательность лучше. Переставлю пункты в расписании и предупрежу ведущего, чтобы он изменил переход между частями.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 3
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "swap_demo_and_review_agenda_order",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_029",
+    "category": "feedback",
+    "situation": "Получение обратной связи по пробному формату отчёта",
+    "tone": "friendly_business",
+    "thread_subject": "Новый формат короткой сводки",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Новый формат короткой сводки",
+        "body": "Слушай, на этой неделе попробовал сделать сводку короче: оставил основные изменения, открытые вопросы и план на следующие дни. Подробные заметки убрал в отдельный раздел, чтобы не перегружать первое письмо. Удобно ли так читать, или нужные детали теперь слишком далеко?\n\nМне особенно важно понять, хватает ли контекста в блоке с открытыми вопросами. Если по нему приходится возвращаться к прошлым письмам, добавлю по одному предложению для каждого пункта.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Новый формат короткой сводки",
+        "body": "Формат удобный. Основное видно сразу, а подробности при необходимости легко найти. Для двух открытых вопросов действительно добавь немного контекста: сейчас неясно, какое решение ждём и от кого.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 24
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Новый формат короткой сводки",
+        "body": "Добавлю в каждом вопросе ожидаемое решение и ответственного. Остальную структуру оставлю как есть. Спасибо, это как раз та проверка, которая мне была нужна.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "weekly_digest_format_needs_decision_context",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_030",
+    "category": "meetings",
+    "situation": "Отмена отдельной встречи после решения вопроса письменно",
+    "tone": "friendly_business",
+    "thread_subject": "Встреча по структуре таблицы",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Встреча по структуре таблицы",
+        "body": "Мы ставили отдельную встречу, чтобы решить вопрос со структурой таблицы. После твоих комментариев я переставил столбцы и добавил пояснение к итогам. Если новая версия тебя устраивает, предлагаю освободить время встречи.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Встреча по структуре таблицы",
+        "body": "Новую версию посмотрел, теперь всё понятно. Встречу можно отменить. Если при заполнении появится новый вопрос, напишу отдельно.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 5
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "cancel_meeting_after_table_issue_resolved",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_031",
+    "category": "project_coordination",
+    "situation": "Уточнение зависимости между двумя рабочими этапами",
+    "tone": "neutral_business",
+    "thread_subject": "Можно ли начать следующий этап",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Можно ли начать следующий этап",
+        "body": "По {{project}} первая проверка ещё отмечена как незавершённая. Можно ли уже начинать подготовку итогового описания, или мы ждём закрытия всех замечаний? Хочу спланировать работу команды без лишней переделки.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Можно ли начать следующий этап",
+        "body": "Основную часть описания можно готовить. Открыты только замечания к одному примеру, они не меняют общую логику. Сам пример пока оставь без финальной формулировки.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 23
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Можно ли начать следующий этап",
+        "body": "Понял. Начнём с общей части, пример добавим после закрытия замечаний. Так уложимся в план без повторной сборки всего документа.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "project"
+    ],
+    "uniqueness_key": "start_next_phase_while_one_example_open",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_032",
+    "category": "documents",
+    "situation": "Сверка списка изменений между версиями",
+    "tone": "collaborative",
+    "thread_subject": "Что изменилось в новой версии",
+    "messages": [
+      {
+        "from": "recipient",
+        "subject": "Что изменилось в новой версии",
+        "body": "Получил новую версию {{document}}. Можешь коротко перечислить изменения относительно файла, который мы смотрели во вторник? Хочу сосредоточиться на новых местах и не перечитывать документ целиком.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Что изменилось в новой версии",
+        "body": "Конечно. Я переставил второй и третий разделы, уточнил порядок проверки в середине документа и заменил пример в конце. Остальной текст не менялся. Больше всего внимания стоит уделить порядку проверки: там я объединил два шага и хочу убедиться, что смысл сохранился.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Что изменилось в новой версии",
+        "body": "Спасибо, по этим местам и пройдусь. Если объединение шагов меняет ответственность участников, отмечу это отдельным комментарием.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "document"
+    ],
+    "uniqueness_key": "document_revision_change_summary",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_033",
+    "category": "events",
+    "situation": "Уточнение количества участников внутреннего мероприятия",
+    "tone": "friendly_business",
+    "thread_subject": "Участники {{event}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Участники {{event}}",
+        "body": "Собираю окончательный список на {{event}}. Подтверди, пожалуйста, придут ли от вашей команды все участники, которых мы обсуждали, или состав изменился. Мне нужно правильно распределить время для выступлений и вопросов.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Участники {{event}}",
+        "body": "Состав немного изменился: один коллега не сможет участвовать, остальные будут. Выступать от команды буду я, так что отдельный слот для второго докладчика не нужен.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 24
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Участники {{event}}",
+        "body": "Спасибо, обновил список и убрал лишний слот. Время для вопросов после твоего выступления оставил без изменений.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "event"
+    ],
+    "uniqueness_key": "event_roster_changes_speaker_slot",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_034",
+    "category": "reporting",
+    "situation": "Выбор уровня детализации для отчёта руководителю",
+    "tone": "neutral_business",
+    "thread_subject": "Детализация итогового отчёта",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Детализация итогового отчёта",
+        "body": "Готовлю итоговый отчёт по {{project}}. Сейчас в основной части есть результаты по каждому этапу, но из-за этого выводы оказываются на третьей странице. Думаю оставить в начале общий результат и ключевые изменения, а подробности перенести ниже. Посмотри, пожалуйста, подходит ли такой порядок для обсуждения с руководителем.\n\nОтдельно хочу сохранить два открытых вопроса: они влияют на следующий этап и не должны потеряться среди завершённых задач. Если видишь более удобную структуру, предложи её до того, как я соберу финальную версию.",
+        "length": "long",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Детализация итогового отчёта",
+        "body": "Порядок подходит. В начале достаточно общего результата, трёх главных изменений и открытых вопросов. Подробности по этапам оставь в конце как справочный раздел. Так на встрече можно будет начать с решений.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 26
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Детализация итогового отчёта",
+        "body": "Пересобрал отчёт по этой структуре. Основные выводы теперь на первой странице, открытые вопросы идут сразу после них. Подробности по этапам сохранил в конце. Прикладываю версию для просмотра перед встречей.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 3
+      }
+    ],
+    "used_variables": [
+      "project"
+    ],
+    "uniqueness_key": "executive_report_summary_before_stage_details",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_035",
+    "category": "team_coordination",
+    "situation": "Проверка готовности команды к небольшому изменению процесса",
+    "tone": "collaborative",
+    "thread_subject": "Новый порядок проверки материалов",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Новый порядок проверки материалов",
+        "body": "На прошлой встрече мы договорились проверять материалы до передачи в общий комплект. Подскажи, успела ли команда обсудить этот порядок? Если есть неудобства, лучше узнать о них сейчас, пока мы не обновили общую инструкцию.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Новый порядок проверки материалов",
+        "body": "Обсудили сегодня утром. Сам порядок подходит, но коллеги попросили один понятный признак, что проверка завершена. Предлагают отмечать результат в общем списке, как мы уже делаем для других этапов.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 5
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Новый порядок проверки материалов",
+        "body": "Это разумно. Добавлю отметку о завершении в инструкцию и покажу обновлённый абзац перед рассылкой команде.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "team_process_change_requires_completion_signal",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_036",
+    "category": "meetings",
+    "situation": "Подготовка вопросов к встрече с соседней командой",
+    "tone": "friendly_business",
+    "thread_subject": "Вопросы к совместной встрече",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Вопросы к совместной встрече",
+        "body": "{{recipient_first_name}}, перед совместной встречей хочу собрать вопросы от нашей команды. У меня записаны два: какие материалы нужны на входе и в какой момент мы получаем обратную связь. Есть ли что-то ещё, что стоит обсудить, пока все участники будут на связи?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Вопросы к совместной встрече",
+        "body": "Добавь вопрос о том, как отмечать срочные изменения после передачи материалов. На прошлой неделе именно на этом месте возникла путаница. Остальные два вопроса тоже актуальны.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Вопросы к совместной встрече",
+        "body": "Добавил. Отправлю три вопроса участникам заранее и попрошу прийти с предложениями по каждому пункту.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "recipient_first_name"
+    ],
+    "uniqueness_key": "cross_team_meeting_urgent_change_process",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_037",
+    "category": "documents",
+    "situation": "Просьба проверить подписи к иллюстрациям",
+    "tone": "neutral_business",
+    "thread_subject": "Подписи к схемам в {{document}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Подписи к схемам в {{document}}",
+        "body": "В {{document}} добавил две схемы процесса. Посмотри, пожалуйста, подписи под ними: я старался сделать их понятными без чтения соседнего текста. Если какой-то шаг на схеме назван иначе, чем в вашей команде, лучше поправить это до общего просмотра.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Подписи к схемам в {{document}}",
+        "body": "На первой схеме всё понятно. На второй замени «передача результата» на «передача на проверку» — так точнее отражён этап. Остальные подписи совпадают с нашими рабочими названиями.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 25
+      }
+    ],
+    "used_variables": [
+      "document"
+    ],
+    "uniqueness_key": "diagram_caption_matches_actual_handoff_step",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_038",
+    "category": "scheduling",
+    "situation": "Проверка удобства нового времени регулярной встречи",
+    "tone": "friendly_business",
+    "thread_subject": "Время еженедельного обсуждения",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Время еженедельного обсуждения",
+        "body": "Думаю перенести наше еженедельное обсуждение на {{meeting_time}}. Сейчас оно попадает между двумя рабочими блоками, и мы часто начинаем с опозданием. Новое время тебе подходит, если сделать его постоянным?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Время еженедельного обсуждения",
+        "body": "Мне подходит. В это время обычно проще спокойно пройтись по вопросам. Давай попробуем две недели и посмотрим, удобно ли остальным участникам.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 6
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Время еженедельного обсуждения",
+        "body": "Хорошо, предложу это время команде как пробный вариант на две недели. После второго обсуждения соберём короткую обратную связь.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "meeting_time"
+    ],
+    "uniqueness_key": "trial_reschedule_recurring_meeting",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_039",
+    "category": "calculations",
+    "situation": "Сверка способа расчёта процента выполнения",
+    "tone": "collaborative",
+    "thread_subject": "Процент выполнения в сводке",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Процент выполнения в сводке",
+        "body": "Проверяю сводку и вижу, что процент выполнения считается от всех запланированных задач, включая перенесённые. Мы раньше исключали переносы из расчёта. Это осознанное изменение методики или в формуле осталось лишнее условие?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Процент выполнения в сводке",
+        "body": "Методику не меняли. Перенесённые задачи нужно исключать, иначе сравнение с прошлой неделей будет некорректным. Я поправлю формулу и перепроверю итог перед отправкой.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Процент выполнения в сводке",
+        "body": "Формулу исправил, итог теперь совпадает с ручной проверкой. Обновлённую сводку прикладываю. Спасибо, что заметил расхождение до рассылки.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 4
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "completion_percentage_excludes_rescheduled_tasks",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_040",
+    "category": "project_coordination",
+    "situation": "Согласование способа закрыть небольшую рабочую задачу",
+    "tone": "neutral_business",
+    "thread_subject": "Закрываем задачу по списку",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Закрываем задачу по списку",
+        "body": "Список материалов обновлён, а замечания после проверки внесены. Остался один формальный шаг: подтвердить, что для текущего этапа комплект полный. Посмотри, пожалуйста, последнюю строку списка. Если ничего не пропущено, я отмечу задачу завершённой.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Закрываем задачу по списку",
+        "body": "Последнюю строку проверил. Все материалы на месте, текущий этап можно закрывать. Дополнительных замечаний у меня нет.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 24
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Закрываем задачу по списку",
+        "body": "Спасибо. Отметил задачу завершённой и добавил короткий итог в общий план.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 1
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "close_materials_checklist_task",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_041",
+    "category": "documents",
+    "situation": "Уточнение, какую версию использовать в работе",
+    "tone": "direct_business",
+    "thread_subject": "Актуальная версия описания",
+    "messages": [
+      {
+        "from": "recipient",
+        "subject": "Актуальная версия описания",
+        "body": "В общей папке вижу две версии описания с похожими названиями. Какая из них актуальна для команды? Я хочу начать проверку сегодня и не оставлять замечания в старом файле.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Актуальная версия описания",
+        "body": "Актуальна версия с пометкой «для просмотра». Вторая осталась после внутренней сборки; я уберу её из общей папки, чтобы больше не было путаницы. В актуальном файле уже учтены замечания со вчерашней встречи.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 2
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Актуальная версия описания",
+        "body": "Понял, проверю версию «для просмотра». Спасибо, что уберёшь старый файл.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 1
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "identify_current_shared_document_version",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_042",
+    "category": "team_coordination",
+    "situation": "Благодарность за помощь с разбором замечаний",
+    "tone": "warm_business",
+    "thread_subject": "Спасибо за разбор замечаний",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Спасибо за разбор замечаний",
+        "body": "Спасибо, что помог вчера разобрать комментарии к {{project}}. После нашего разговора стало ясно, какие замечания меняют содержание, а какие касаются только формулировок. Я уже распределил правки по двум проходам и смогу показать обновлённую версию команде без лишней задержки.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Спасибо за разбор замечаний",
+        "body": "Рад, что разбор помог. Когда будет обновлённая версия, с удовольствием посмотрю спорный раздел ещё раз. Думаю, после этих правок он станет заметно понятнее.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 25
+      }
+    ],
+    "used_variables": [
+      "project"
+    ],
+    "uniqueness_key": "thanks_for_prioritizing_review_comments",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_043",
+    "category": "meetings",
+    "situation": "Уточнение, нужен ли дополнительный участник на встрече",
+    "tone": "collaborative",
+    "thread_subject": "Состав встречи по {{project}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Состав встречи по {{project}}",
+        "body": "На встрече по {{project}} будем обсуждать порядок передачи результата. Думаю пригласить коллегу, который принимает материалы на следующем этапе. Это поможет сразу проверить, удобен ли предложенный порядок. Ты не против расширить состав встречи?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Состав встречи по {{project}}",
+        "body": "Наоборот, это полезно. Пусть подключается к части про передачу результата. Первые десять минут нам нужно закончить обсуждение внутренних замечаний, а затем можно перейти к общему вопросу.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Состав встречи по {{project}}",
+        "body": "Хорошо, приглашу его на вторую часть встречи и заранее пришлю краткий контекст. Внутренние замечания разберём сначала вдвоём.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "project"
+    ],
+    "uniqueness_key": "invite_downstream_colleague_to_second_meeting_part",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_044",
+    "category": "reporting",
+    "situation": "Уточнение источника формулировки для общего обзора",
+    "tone": "neutral_business",
+    "thread_subject": "Формулировка вывода для обзора",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Формулировка вывода для обзора",
+        "body": "В общем обзоре хочу написать, что процесс стал проще после объединения двух шагов. Но пока у нас есть только обратная связь команды, без отдельного измерения времени. Предлагаю сформулировать осторожнее: «команда отмечает, что порядок стал понятнее». Тебе подходит такой вывод?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Формулировка вывода для обзора",
+        "body": "Да, так точнее. Мы пока можем говорить об удобстве по отзывам участников, а не об экономии времени. Добавь, пожалуйста, что вывод относится к пробному периоду.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Формулировка вывода для обзора",
+        "body": "Добавил упоминание пробного периода. Теперь вывод опирается на то, что мы действительно проверили, и не звучит слишком категорично.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "qualify_process_improvement_claim_by_feedback",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_045",
+    "category": "events",
+    "situation": "Подготовка короткого выступления для внутреннего мероприятия",
+    "tone": "friendly_business",
+    "thread_subject": "Короткое выступление на {{event}}",
+    "messages": [
+      {
+        "from": "recipient",
+        "subject": "Короткое выступление на {{event}}",
+        "body": "Я готовлю короткое выступление для {{event}}. Хочу рассказать о ходе работы и одном решении, которое помогло снять задержку. Можешь посмотреть план выступления и сказать, не слишком ли много в нём деталей для десяти минут?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Короткое выступление на {{event}}",
+        "body": "Посмотрел план. Первые два пункта хорошо задают контекст, а вот подробную хронологию обсуждений я бы сократил. Лучше оставить саму проблему, выбранное решение и результат. Тогда останется время на один вопрос из зала.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 5
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Короткое выступление на {{event}}",
+        "body": "Согласен. Уберу хронологию из основной части и оставлю её в заметках на случай вопросов. Спасибо за быстрый взгляд.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "event"
+    ],
+    "uniqueness_key": "ten_minute_event_talk_trim_chronology",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_046",
+    "category": "materials",
+    "situation": "Согласование структуры папки с рабочими материалами",
+    "tone": "collaborative",
+    "thread_subject": "Порядок материалов для команды",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Порядок материалов для команды",
+        "body": "Собрал рабочие материалы по этапам, но в папке ещё лежат старые примеры рядом с актуальными. Предлагаю выделить отдельный раздел для архивных версий, а в основной части оставить только то, что команда использует сейчас. Это упростит поиск перед встречами.\n\nПеред перестановкой хочу уточнить: есть ли старые материалы, к которым вы регулярно возвращаетесь? Если да, оставлю для них понятный указатель в основном списке, чтобы ничего полезного не потерялось.",
+        "length": "medium",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Порядок материалов для команды",
+        "body": "Регулярно возвращаемся только к одному старому примеру из раздела проверки. Остальное можно перенести в архив. Для этого примера достаточно строки в основном списке с пояснением, зачем он сохранён.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 25
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Порядок материалов для команды",
+        "body": "Так и сделал: старые версии перенёс в архив, нужный пример оставил в основном списке с коротким пояснением. Теперь актуальные материалы идут по этапам без смешения с прежними вариантами.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 3
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "archive_old_materials_keep_one_reference_example",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_047",
+    "category": "project_coordination",
+    "situation": "Подтверждение завершения небольшого этапа проекта",
+    "tone": "neutral_business",
+    "thread_subject": "Завершение первого этапа {{project}}",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Завершение первого этапа {{project}}",
+        "body": "Первый этап {{project}} завершён: материалы собраны, внутренние замечания закрыты, итоговый список обновлён. Подтверди, пожалуйста, что со стороны вашей команды больше нет открытых пунктов. После этого отмечу этап завершённым в общем плане.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Завершение первого этапа {{project}}",
+        "body": "Подтверждаю, открытых пунктов у нас нет. К следующему этапу готовы. Спасибо, что собрал итоговый список в одном месте.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 24
+      }
+    ],
+    "used_variables": [
+      "project"
+    ],
+    "uniqueness_key": "phase_one_completion_cross_team_confirmation",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_048",
+    "category": "documents",
+    "situation": "Уточнение, нужен ли отдельный лист с пояснениями",
+    "tone": "friendly_business",
+    "thread_subject": "Пояснения к рабочей таблице",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Пояснения к рабочей таблице",
+        "body": "В таблице появились два новых столбца, и коллеги могут по-разному понять, что туда вносить. Думаю добавить короткий лист с пояснениями и одним примером заполнения. Не будет ли это лишним для такого небольшого изменения?",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Пояснения к рабочей таблице",
+        "body": "Отдельный лист будет полезен, если ограничиться несколькими строками. Особенно поясни разницу между «готово к проверке» и «проверено»: на прошлой неделе эти статусы уже путали.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 3
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Пояснения к рабочей таблице",
+        "body": "Добавил короткие пояснения и пример для обоих статусов. Теперь передам таблицу на пробное заполнение двум коллегам и проверю, остались ли вопросы.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 4
+      }
+    ],
+    "used_variables": [],
+    "uniqueness_key": "spreadsheet_status_columns_need_brief_guide",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_049",
+    "category": "meetings",
+    "situation": "Перенос обсуждения после появления новой информации",
+    "tone": "neutral_business",
+    "thread_subject": "Обсуждение результатов проверки",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Обсуждение результатов проверки",
+        "body": "Сегодня пришли дополнительные замечания по результатам проверки. Предлагаю перенести наше обсуждение на следующий рабочий день, чтобы успеть свести их с уже полученными комментариями. Иначе на встрече будем разбирать неполную картину.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Обсуждение результатов проверки",
+        "body": "Согласен перенести. Мне удобно в {{meeting_time}}. Если до встречи пришлёшь общий список замечаний, я отмечу вопросы, по которым нужно решение команды.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 4
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Обсуждение результатов проверки",
+        "body": "Время подходит. Список соберу сегодня и пришлю отдельным файлом в этой переписке.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 2
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Обсуждение результатов проверки",
+        "body": "Сводный список готов, прикладываю. Новые замечания пометил отдельно, повторяющиеся объединил. На встрече предлагаю начать с трёх пунктов, где нужен общий выбор.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 22
+      }
+    ],
+    "used_variables": [
+      "meeting_time"
+    ],
+    "uniqueness_key": "reschedule_review_to_consolidate_late_comments",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": false,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  },
+  {
+    "id": "warmup_scenario_050",
+    "category": "team_coordination",
+    "situation": "Согласование порядка работы после завершения общего обсуждения",
+    "tone": "collaborative",
+    "thread_subject": "Следующие шаги после общего просмотра",
+    "messages": [
+      {
+        "from": "sender",
+        "subject": "Следующие шаги после общего просмотра",
+        "body": "После общего просмотра у нас осталось несколько замечаний разного размера. Я предлагаю сначала исправить места, которые влияют на порядок работы, затем пройтись по формулировкам и только после этого собрать окончательную версию. Так мы не будем дважды редактировать одни и те же абзацы.\n\nЯ возьму правки по первому разделу и сведу комментарии в один список. Тебя прошу посмотреть примеры во второй части: там важно сохранить привычные для команды названия шагов. Если найдёшь противоречие с действующим порядком, отметь его отдельно, чтобы мы обсудили до финальной сборки.",
+        "length": "long",
+        "requires_reply": true,
+        "delay_hours_before": 0
+      },
+      {
+        "from": "recipient",
+        "subject": "Re: Следующие шаги после общего просмотра",
+        "body": "Порядок подходит. Примеры во второй части посмотрю до {{deadline}}. Уже вижу один термин, который стоит сверить с рабочим планом, но это не мешает начать остальные правки.",
+        "length": "short",
+        "requires_reply": true,
+        "delay_hours_before": 5
+      },
+      {
+        "from": "sender",
+        "subject": "Re: Следующие шаги после общего просмотра",
+        "body": "Хорошо. Я пока исправлю первый раздел и отмечу открытый термин в списке. После твоей проверки сведём изменения в одну версию.",
+        "length": "short",
+        "requires_reply": false,
+        "delay_hours_before": 2
+      }
+    ],
+    "used_variables": [
+      "deadline"
+    ],
+    "uniqueness_key": "post_group_review_fix_process_before_wording",
+    "quality_checks": {
+      "has_context": true,
+      "has_natural_continuation": true,
+      "has_varied_length": true,
+      "contains_no_links": true,
+      "contains_no_sensitive_data": true
+    }
+  }
+]
