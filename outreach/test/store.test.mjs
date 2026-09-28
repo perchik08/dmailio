@@ -275,6 +275,42 @@ test("duplicate contact imports do not overwrite campaign state", () => {
   );
   s.close();
 });
+test("existing lead email lookup covers every campaign and normalizes case", () => {
+  const { s, c, m } = setup();
+  s.db.prepare("UPDATE campaigns SET status='draft' WHERE id=?").run(c.id);
+  s.importContacts(c.id, [
+    { email: "Lead@Example.com", fields: { name: "X" } },
+  ]);
+  const another = s.saveCampaign({
+    name: "Another",
+    mailboxIds: [m.id],
+    schedule: s.campaign(c.id).schedule,
+    steps: [{ subject: "Hello", body: "Hi", delay: 0 }],
+  });
+  s.importContacts(another.id, [{ email: "second@example.com", fields: {} }]);
+  assert.deepEqual(s.existingLeadEmails().sort(), [
+    "lead@example.com",
+    "second@example.com",
+  ]);
+  s.close();
+});
+test("failed contact batch rolls back every lead row", () => {
+  const { s, c } = setup();
+  s.db.prepare("UPDATE campaigns SET status='draft' WHERE id=?").run(c.id);
+  assert.throws(
+    () =>
+      s.importContacts(c.id, [
+        { email: "valid@example.com", fields: { name: "Valid" } },
+        { email: "not-an-email", fields: { name: "Invalid" } },
+      ]),
+    /email/i,
+  );
+  assert.deepEqual(
+    s.campaign(c.id).leads.map((lead) => lead.email),
+    ["lead@example.com"],
+  );
+  s.close();
+});
 test("credentials persist across restart and wrong encryption key fails closed", () => {
   const dir = mkdtempSync(join(tmpdir(), "dmailio-test-"));
   let s;

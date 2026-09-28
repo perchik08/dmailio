@@ -8,6 +8,12 @@ import { MailGateway } from "./mail.mjs";
 import { Worker } from "./worker.mjs";
 import { checkDomainDNS } from "./dns.mjs";
 import { parseContacts, requireValue, render } from "./core.mjs";
+import {
+  listXlsxSheets,
+  parseCsvTable,
+  parseXlsxSheet,
+} from "./import-table.mjs";
+import { previewImport, suggestColumnMappings } from "./import.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
@@ -96,10 +102,14 @@ export function createApp({
       let data = {};
       if (!["GET", "HEAD"].includes(method)) {
         let size = 0;
+        const importRoute =
+          path === "/api/import/preview" ||
+          /\/api\/campaigns\/[^/]+\/import$/.test(path);
+        const maxRequestBytes = importRoute ? 14_000_000 : 11_000_000;
         const chunks = [];
         for await (const chunk of req) {
           size += chunk.length;
-          if (size > 11_000_000) {
+          if (size > maxRequestBytes) {
             send({ error: "Файл слишком большой" }, 413);
             req.destroy();
             return;
@@ -244,8 +254,29 @@ export function createApp({
           return send({ error: "Проверка SMTP/IMAP не пройдена" }, 400);
         }
       }
-      if (path === "/api/import/preview" && method === "POST")
-        return send(parseContacts(data.csv));
+      if (path === "/api/import/preview" && method === "POST") {
+        if (typeof data.csv === "string") return send(parseContacts(data.csv));
+        const source = await readImportTable(data);
+        const tableInfo = {
+          format: source.format,
+          sheetId: source.sheetId,
+          sheetName: source.sheetName,
+          sheets: source.sheets,
+          columns: source.columns,
+          suggestedMappings: suggestColumnMappings(source.columns),
+          total: source.total,
+        };
+        if (!Array.isArray(data.mappings)) return send(tableInfo);
+        const preview = previewImport(source.table, data.mappings, {
+          existingEmails:
+            data.skipExisting === false ? [] : store.existingLeadEmails(),
+          campaignEmails: data.campaignId
+            ? store.campaignLeadEmails(data.campaignId)
+            : [],
+          skipExisting: data.skipExisting !== false,
+        });
+        return send({ ...tableInfo, preview });
+      }
       if (path === "/api/template.csv" && method === "GET") {
         res.setHeader(
           "Content-Disposition",
@@ -266,12 +297,26 @@ export function createApp({
         if (method === "GET" && !action) return send(store.campaign(id));
         if (method === "POST") {
           if (action === "import") {
-            const parsed = parseContacts(data.csv);
+            if (typeof data.csv === "string") {
+              const parsed = parseContacts(data.csv);
+              requireValue(
+                !parsed.errors.length,
+                "Исправьте ошибки CSV перед импортом",
+              );
+              return send(store.importContacts(id, parsed.contacts));
+            }
+            const source = await readImportTable(data);
+            const preview = previewImport(source.table, data.mappings, {
+              existingEmails:
+                data.skipExisting === false ? [] : store.existingLeadEmails(),
+              campaignEmails: store.campaignLeadEmails(id),
+              skipExisting: data.skipExisting !== false,
+            });
             requireValue(
-              !parsed.errors.length,
-              "Исправьте ошибки CSV перед импортом",
+              preview.importable > 0,
+              "Нет контактов для импорта после проверки ошибок и дублей",
             );
-            return send(store.importContacts(id, parsed.contacts));
+            return send(store.importContacts(id, preview.contacts));
           }
           if (action === "status")
             return send(store.setCampaignStatus(id, data.status));
@@ -357,7 +402,14 @@ export function createApp({
       }
       if (
         method === "GET" &&
-        ["/", "/app.js", "/editor.js", "/leads.js", "/style.css"].includes(path)
+        [
+          "/",
+          "/app.js",
+          "/editor.js",
+          "/leads.js",
+          "/importer.js",
+          "/style.css",
+        ].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);
         return send(
@@ -385,6 +437,41 @@ export function createApp({
         );
     }
   });
+}
+
+async function readImportTable(data) {
+  const format = String(data.format || "").toLowerCase();
+  if (format === "csv") {
+    requireValue(typeof data.content === "string", "Загрузите CSV-файл");
+    const table = parseCsvTable(data.content);
+    return { ...table, table, total: table.rows.length };
+  }
+  if (format === "xlsx") {
+    requireValue(
+      typeof data.content === "string" &&
+        data.content.length <= 14_000_000 &&
+        /^[A-Za-z0-9+/]*={0,2}$/.test(data.content),
+      "Файл Excel прочитать не удалось",
+    );
+    const buffer = Buffer.from(data.content, "base64");
+    requireValue(
+      buffer.toString("base64").replace(/=+$/, "") ===
+        data.content.replace(/=+$/, ""),
+      "Файл Excel прочитать не удалось",
+    );
+    const sheets = await listXlsxSheets(buffer);
+    if (!data.sheetId) {
+      const first = await parseXlsxSheet(buffer, sheets[0].id);
+      return { ...first, table: first, sheets, total: first.rows.length };
+    }
+    const table = await parseXlsxSheet(buffer, data.sheetId);
+    return { ...table, table, sheets, total: table.rows.length };
+  }
+  if (format === "xls")
+    throw new Error(
+      "Формат .xls не поддерживается. Сохраните книгу как .xlsx и загрузите снова.",
+    );
+  throw new Error("Поддерживаются файлы CSV и .xlsx");
 }
 if (
   process.argv[1] &&

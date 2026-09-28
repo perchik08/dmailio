@@ -642,6 +642,19 @@ export class Store {
       return { added, duplicates: contacts.length - added };
     });
   }
+  existingLeadEmails() {
+    return this.db
+      .prepare("SELECT DISTINCT lower(email) email FROM leads")
+      .all()
+      .map(({ email: address }) => address);
+  }
+  campaignLeadEmails(campaignId) {
+    this.campaign(campaignId);
+    return this.db
+      .prepare("SELECT lower(email) email FROM leads WHERE campaign_id=?")
+      .all(campaignId)
+      .map(({ email: address }) => address);
+  }
   preview(id, leadId, mailboxId, step = 0) {
     const c = this.campaign(id);
     const l = c.leads.find((l) => l.id === leadId) || c.leads[0];

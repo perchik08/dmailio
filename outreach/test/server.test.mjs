@@ -20,6 +20,7 @@ test("API requires login, same-origin writes and excludes credentials", async ()
     assert.equal(script.status, 200);
     assert.equal(stylesheet.status, 200);
     assert.match(script.headers.get("content-type"), /javascript/);
+    assert.equal((await fetch(base + "/importer.js")).status, 200);
     assert.match(stylesheet.headers.get("content-type"), /css/);
     for (const family of ["onest", "inter"]) {
       for (const subset of ["latin", "cyrillic"]) {
@@ -132,6 +133,105 @@ test("API requires login, same-origin writes and excludes credentials", async ()
       ).status,
       403,
     );
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
+    store.close();
+  }
+});
+
+test("mapped import preview is read-only, reports campaign-wide duplicates and rechecks on confirmation", async () => {
+  const store = new Store(":memory:", "a".repeat(64));
+  const mailbox = store.saveMailbox({
+    email: "sender@example.com",
+    limit: 10,
+    smtp: { host: "smtp.example.com", port: 465, password: "secret" },
+    imap: { host: "imap.example.com", port: 993, password: "secret" },
+  });
+  const campaign = store.saveCampaign({
+    name: "Import test",
+    mailboxIds: [mailbox.id],
+    schedule: {
+      days: [1, 2, 3, 4, 5],
+      start: "09:00",
+      end: "18:00",
+      timezone: "Europe/Moscow",
+      interval: 12,
+    },
+    steps: [{ subject: "Hello", body: "Hello", delay: 0 }],
+  });
+  store.importContacts(campaign.id, [
+    { email: "used@example.com", fields: {} },
+  ]);
+  const app = module.createApp({
+    store,
+    password: "test-password-long",
+    publicURL: "http://localhost:9100",
+    gateway: {},
+    worker: {},
+  });
+  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${app.address().port}`;
+  const origin = "http://localhost:9100";
+  try {
+    const login = await fetch(base + "/api/login", {
+      method: "POST",
+      headers: { origin },
+      body: JSON.stringify({ password: "test-password-long" }),
+    });
+    const cookie = login.headers.get("set-cookie").split(";")[0];
+    const post = (path, body) =>
+      fetch(base + path, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const source = {
+      format: "csv",
+      content:
+        "Email,Компания,Письмо 1\nused@example.com,Acme,Hello\nfresh@example.com,NewCo,Hi\nnot-an-email,Other,Skip",
+    };
+    const columnResponse = await post("/api/import/preview", source);
+    assert.equal(columnResponse.status, 200);
+    const columns = await columnResponse.json();
+    assert.equal(columns.total, 3);
+    assert.equal(columns.columns[1].header, "Компания");
+    assert.equal(columns.suggestedMappings[1].target, "company");
+    assert.equal(store.campaign(campaign.id).leads.length, 1);
+    const mappings = [
+      { columnId: "column-0", target: "email" },
+      { columnId: "column-1", target: "company" },
+      { columnId: "column-2", target: { kind: "sequence_step", step: 1 } },
+    ];
+    const previewResponse = await post("/api/import/preview", {
+      ...source,
+      mappings,
+      campaignId: campaign.id,
+    });
+    assert.equal(previewResponse.status, 200);
+    const preview = (await previewResponse.json()).preview;
+    assert.equal(preview.importable, 1);
+    assert.equal(preview.errorCount, 1);
+    assert.match(preview.skipped[0].reason, /уже есть/);
+    assert.equal(store.campaign(campaign.id).leads.length, 1);
+    const imported = await post(`/api/campaigns/${campaign.id}/import`, {
+      ...source,
+      mappings,
+    });
+    assert.equal(imported.status, 200);
+    assert.equal((await imported.json()).added, 1);
+    assert.equal(store.campaign(campaign.id).leads.length, 2);
+    const secondImport = await post(`/api/campaigns/${campaign.id}/import`, {
+      ...source,
+      mappings,
+    });
+    assert.equal(secondImport.status, 400);
+    assert.equal(store.campaign(campaign.id).leads.length, 2);
+    const xls = await post("/api/import/preview", {
+      format: "xls",
+      content: "",
+    });
+    assert.equal(xls.status, 400);
+    assert.match((await xls.json()).error, /Сохраните книгу как \.xlsx/);
   } finally {
     await new Promise((resolve) => app.close(resolve));
     store.close();
