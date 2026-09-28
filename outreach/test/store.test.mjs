@@ -110,6 +110,32 @@ function setup() {
   s.setCampaignStatus(c.id, "active");
   return { s, m, c };
 }
+test("new campaign drafts appear in the list immediately and can be renamed", () => {
+  const s = new module.Store(":memory:", "a".repeat(64));
+  const draft = s.createCampaignDraft("Подбор партнёров");
+  assert.equal(draft.status, "draft");
+  assert.equal(draft.name, "Подбор партнёров");
+  assert.equal(draft.steps.length, 1);
+  assert.equal(draft.steps[0].subject, "");
+  assert.equal(draft.steps[0].body, "");
+  assert.throws(
+    () => s.setCampaignStatus(draft.id, "active"),
+    /Заполните тему первого письма и текст каждого письма/,
+  );
+  assert.deepEqual(
+    s.campaigns().map(({ id, name, status }) => ({ id, name, status })),
+    [{ id: draft.id, name: "Подбор партнёров", status: "draft" }],
+  );
+
+  const renamed = s.renameCampaignDraft(draft.id, "Партнёры — осень");
+  assert.equal(renamed.name, "Партнёры — осень");
+  assert.equal(s.campaigns()[0].name, "Партнёры — осень");
+  assert.throws(
+    () => s.renameCampaignDraft(draft.id, "   "),
+    /Введите название кампании/,
+  );
+  s.close();
+});
 test("signature editing preserves verification and snapshots formatted signature for queued mail", () => {
   const { s, m, c } = setup();
   s.saveSignature(m.id, {

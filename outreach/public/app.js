@@ -235,36 +235,22 @@ function campaigns() {
   shell(
     `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${badge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
   );
-  click("new", () => {
-    current = {
-      name: "Новая кампания",
-      status: "draft",
-      mailboxIds: [],
-      steps: [
-        {
-          subject: "",
-          body: "",
-          delay: 0,
-          format: "markdown",
-          includeSignature: true,
-        },
-      ],
-      schedule: {
-        days: [1, 2, 3, 4, 5],
-        start: "09:00",
-        end: "18:00",
-        timezone: "Europe/Moscow",
-        interval: 12,
-      },
-      leads: [],
-      trackOpens: false,
-    };
-    activeTab = "leads";
-    stepIndex = 0;
-    importCSV = "";
-    parsed = null;
-    importSession = null;
-    renderCampaign();
+  click("new", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      current = await api("/campaigns/draft", { name: "Новая кампания" });
+      state = await api("/state");
+      activeTab = "leads";
+      stepIndex = 0;
+      importCSV = "";
+      parsed = null;
+      importSession = null;
+      renderCampaign();
+    } catch (error) {
+      button.disabled = false;
+      throw error;
+    }
   });
   document.querySelectorAll("[data-campaign]").forEach(
     (b) =>
@@ -313,6 +299,70 @@ async function saveCampaign() {
   state = await api("/state");
   notice("Кампания сохранена");
   renderCampaign();
+}
+function bindCampaignTitle() {
+  const button = document.querySelector("#campaign-title");
+  button?.addEventListener("click", () => {
+    const originalName = current.name;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = "campaign-title-input";
+    input.className = "campaign-title-input";
+    input.maxLength = 150;
+    input.value = originalName;
+    input.setAttribute("aria-label", "Название кампании");
+    button.replaceWith(input);
+    input.focus();
+    input.select();
+    let finished = false;
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      } else if (event.key === "Escape") {
+        finished = true;
+        renderCampaign();
+      }
+    });
+    input.addEventListener(
+      "blur",
+      action(async () => {
+        if (finished) return;
+        finished = true;
+        const name = input.value.trim();
+        if (!name) {
+          notice("Введите название кампании");
+          renderCampaign();
+          return;
+        }
+        if (name === originalName) {
+          renderCampaign();
+          return;
+        }
+        const editedCampaign = current;
+        const settingsName = document.querySelector("#campaign-name");
+        current.name = name;
+        if (settingsName) settingsName.value = name;
+        try {
+          const saved = await api(`/campaigns/${editedCampaign.id}/name`, {
+            name,
+          });
+          editedCampaign.name = saved.name;
+          state = await api("/state");
+          notice("Название кампании сохранено");
+          if (current === editedCampaign) renderCampaign();
+          else if (!current && page === "campaigns") campaigns();
+        } catch (error) {
+          if (current === editedCampaign) {
+            current.name = originalName;
+            if (settingsName) settingsName.value = originalName;
+            renderCampaign();
+          }
+          throw error;
+        }
+      }),
+    );
+  });
 }
 function renderImportWizard(session) {
   const { table, mappings, review } = session;
@@ -529,7 +579,7 @@ function wireImportWizard() {
 function renderCampaign() {
   const editable = current.status === "draft";
   shell(
-    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${escape(current.name)}</h1>${badge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" ? "disabled" : ""}>${current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div><div class="tabs">${[
+    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${badge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" ? "disabled" : ""}>${current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div><div class="tabs">${[
       ["leads", "1. Лиды"],
       ["sequence", "2. Цепочка"],
       ["settings", "3. Настройки"],
@@ -541,6 +591,7 @@ function renderCampaign() {
       )
       .join("")}</div><div id="campaign-content"></div>`,
   );
+  bindCampaignTitle();
   click("back", async () => {
     current = null;
     await refresh();

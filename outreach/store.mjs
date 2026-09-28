@@ -620,6 +620,46 @@ export class Store {
         .map((l) => ({ ...l, fields: JSON.parse(l.fields) })),
     };
   }
+  createCampaignDraft(name) {
+    requireValue(
+      typeof name === "string" && name.trim() && name.length <= 150,
+      "Введите название кампании",
+    );
+    const id = randomUUID();
+    const config = {
+      steps: [
+        {
+          subject: "",
+          body: "",
+          delay: 0,
+          format: "markdown",
+          includeSignature: true,
+        },
+      ],
+      mailboxIds: [],
+      schedule: defaultSchedule,
+      trackOpens: false,
+      trackClicks: false,
+    };
+    this.db
+      .prepare("INSERT INTO campaigns(id,name,config,created) VALUES(?,?,?,?)")
+      .run(id, name.trim(), json(config), Date.now());
+    return this.campaign(id);
+  }
+  renameCampaignDraft(id, name) {
+    requireValue(
+      typeof name === "string" && name.trim() && name.length <= 150,
+      "Введите название кампании",
+    );
+    requireValue(
+      this.campaign(id).status === "draft",
+      "Редактировать можно только черновик",
+    );
+    this.db
+      .prepare("UPDATE campaigns SET name=? WHERE id=?")
+      .run(name.trim(), id);
+    return this.campaign(id);
+  }
   importContacts(id, contacts) {
     requireValue(
       this.campaign(id).status === "draft",
@@ -717,6 +757,12 @@ export class Store {
     const c = this.campaign(id);
     if (status === "active") {
       requireValue(c.status !== "completed", "Кампания завершена");
+      requireValue(
+        c.steps.length > 0 &&
+          c.steps[0].subject.trim() &&
+          c.steps.every((step) => step.body.trim()),
+        "Заполните тему первого письма и текст каждого письма",
+      );
       requireValue(
         c.mailboxIds.length && c.leads.length,
         "Нужны ящики и контакты",

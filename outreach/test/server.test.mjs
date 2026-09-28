@@ -2,6 +2,67 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as module from "../server.mjs";
 import { Store } from "../store.mjs";
+test("draft creation and rename APIs persist titles visible in campaign state", async () => {
+  const store = new Store(":memory:", "a".repeat(64));
+  const app = module.createApp({
+    store,
+    password: "test-password-long",
+    publicURL: "http://localhost:9100",
+    gateway: {},
+    worker: {},
+  });
+  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${app.address().port}`;
+  const origin = "http://localhost:9100";
+  try {
+    assert.equal(
+      (
+        await fetch(base + "/api/campaigns/draft", {
+          method: "POST",
+          headers: { origin, "content-type": "application/json" },
+          body: JSON.stringify({ name: "Новая кампания" }),
+        })
+      ).status,
+      401,
+    );
+    const login = await fetch(base + "/api/login", {
+      method: "POST",
+      headers: { origin },
+      body: JSON.stringify({ password: "test-password-long" }),
+    });
+    const cookie = login.headers.get("set-cookie").split(";")[0];
+    const post = (path, body) =>
+      fetch(base + path, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const created = await post("/api/campaigns/draft", {
+      name: "Новая кампания",
+    });
+    assert.equal(created.status, 201);
+    const draft = await created.json();
+    const state = await (
+      await fetch(base + "/api/state", { headers: { cookie } })
+    ).json();
+    assert.ok(
+      state.campaigns.some(
+        ({ id, name, status }) =>
+          id === draft.id && name === "Новая кампания" && status === "draft",
+      ),
+    );
+
+    const renamed = await post(`/api/campaigns/${draft.id}/name`, {
+      name: "Партнёры — осень",
+    });
+    assert.equal(renamed.status, 200);
+    assert.equal((await renamed.json()).name, "Партнёры — осень");
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
+    store.close();
+  }
+});
 test("API requires login, same-origin writes and excludes credentials", async () => {
   assert.equal(typeof module.createApp, "function");
   const store = new Store(":memory:", "a".repeat(64));

@@ -284,18 +284,22 @@ export function createApp({
         );
         return send(sample, 200, "text/csv; charset=utf-8");
       }
+      if (path === "/api/campaigns/draft" && method === "POST")
+        return send(store.createCampaignDraft(data.name), 201);
       if (path === "/api/campaigns" && method === "POST")
         return send(store.saveCampaign(data), 201);
       const leads = path.match(/^\/api\/campaigns\/([^/]+)\/leads$/);
       if (leads && method === "POST")
         return send(store.leadPage(leads[1], data));
       const campaign = path.match(
-        /^\/api\/campaigns\/([^/]+)(?:\/(import|status|preview))?$/,
+        /^\/api\/campaigns\/([^/]+)(?:\/(import|name|status|preview))?$/,
       );
       if (campaign) {
         const [, id, action] = campaign;
         if (method === "GET" && !action) return send(store.campaign(id));
         if (method === "POST") {
+          if (action === "name")
+            return send(store.renameCampaignDraft(id, data.name));
           if (action === "import") {
             if (typeof data.csv === "string") {
               const parsed = parseContacts(data.csv);
