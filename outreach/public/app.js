@@ -1,5 +1,6 @@
 import { mountEditor } from "/editor.js";
 import { mountLeads } from "/leads.js";
+import { renderSequenceSidebar, updateSequenceDelay } from "/sequence.js";
 import {
   fileToImportPayload,
   importTargets,
@@ -272,10 +273,15 @@ function readEditor() {
   if (document.querySelector("#subject")) {
     current.steps[stepIndex].subject = document.querySelector("#subject").value;
     current.steps[stepIndex].body = document.querySelector("#body").value;
-    current.steps[stepIndex].delay = Number(
-      document.querySelector("#delay").value,
-    );
   }
+  document.querySelectorAll("[data-step-delay]").forEach((input) => {
+    if (input.value !== "")
+      updateSequenceDelay(
+        current.steps,
+        Number(input.dataset.stepDelay),
+        input.value,
+      );
+  });
   if (document.querySelector("#schedule-start")) {
     current.mailboxIds = [
       ...document.querySelectorAll("[name=sender]:checked"),
@@ -659,7 +665,7 @@ function renderCampaign() {
         "Подпись Отправителя",
       ]),
     ];
-    box.innerHTML = `<div class="steps"><aside>${current.steps.map((s, i) => `<div class="step ${i === stepIndex ? "selected" : ""}"><button data-step="${i}">Письмо ${i + 1}</button><small>${i ? "Через " + s.delay + " дн." : "Начало цепочки"}</small><p>${escape(s.subject || "Тема предыдущего письма")}</p></div>`).join("")}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label>Задержка после предыдущего письма, дней<input id="delay" type="number" min="0" max="365" value="${s.delay}" ${stepIndex ? "" : "disabled"}></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
+    box.innerHTML = `<div class="steps"><aside>${renderSequenceSidebar(current.steps, stepIndex, editable, escape)}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
     const bodyEditor = mountEditor(document.querySelector("#body"), {
       api,
       notify: notice,

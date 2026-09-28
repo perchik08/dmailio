@@ -564,6 +564,26 @@ fieldset {
   margin-bottom: 12px;
   cursor: pointer;
 }
+.step-delay {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  background: #f8f9fb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+  white-space: nowrap;
+}
+.step-delay input {
+  width: 42px;
+  min-width: 42px;
+  padding: 5px 4px;
+  text-align: center;
+}
 .step.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px #e0e3ff;
