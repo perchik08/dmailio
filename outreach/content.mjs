@@ -38,18 +38,55 @@ export function renderContent(
   message,
   resolveImage = () => null,
   forEmail = false,
+  rewriteLink = null,
 ) {
   const attachments = new Map();
+  const link = (raw) => {
+    if (!rewriteLink) return raw;
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      return raw;
+    }
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password
+    )
+      return raw;
+    return rewriteLink(raw);
+  };
   const part = (body = "", format = "plain") => {
     requireValue(
       typeof body === "string" && body.length <= 220_000,
       "Письмо слишком большое",
     );
-    if (contentFormat(format) === "plain")
+    if (contentFormat(format) === "plain") {
+      if (!rewriteLink)
+        return {
+          html: `<div style="white-space:pre-wrap;">${escapeHTML(body).replace(/\r?\n/g, "<br>")}</div>`,
+          text: body,
+        };
+      let offset = 0,
+        html = "",
+        text = "";
+      for (const match of body.matchAll(/https?:\/\/[^\s<>"\[\]]+/gi)) {
+        const raw = match[0].replace(/[.,;!?)]+$/, "");
+        const target = link(raw);
+        html +=
+          escapeHTML(body.slice(offset, match.index)) +
+          `<a href="${escapeHTML(target)}">${escapeHTML(raw)}</a>`;
+        text += body.slice(offset, match.index) + target;
+        offset = match.index + raw.length;
+      }
+      html += escapeHTML(body.slice(offset));
+      text += body.slice(offset);
       return {
-        html: `<div style="white-space:pre-wrap;">${escapeHTML(body).replace(/\r?\n/g, "<br>")}</div>`,
-        text: body,
+        html: `<div style="white-space:pre-wrap;">${html.replace(/\r?\n/g, "<br>")}</div>`,
+        text,
       };
+    }
     const html = sanitize(
       marked.parse(body, { gfm: true, breaks: true, async: false }),
       {
@@ -115,7 +152,9 @@ export function renderContent(
             attribs: {
               ...attrs,
               href: /^(https?:|mailto:|tel:)/i.test(attrs.href || "")
-                ? attrs.href
+                ? rewriteLink && /^https?:/i.test(attrs.href)
+                  ? link(attrs.href)
+                  : attrs.href
                 : "",
               target: "_blank",
               rel: "noopener noreferrer",

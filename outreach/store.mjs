@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { queryLeads } from "./leads.mjs";
 import { contentFormat, renderContent, validateImage } from "./content.mjs";
 import {
   randomUUID,
@@ -67,6 +68,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS suppressions(email TEXT PRIMARY KEY,reason TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS thread_status(lead_id TEXT PRIMARY KEY REFERENCES leads(id),status TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,message_id TEXT NOT NULL REFERENCES messages(id),kind TEXT NOT NULL,created INTEGER NOT NULL, UNIQUE(message_id,kind));
+      CREATE TABLE IF NOT EXISTS tracked_links(token TEXT PRIMARY KEY,message_id TEXT NOT NULL REFERENCES messages(id),url TEXT NOT NULL,UNIQUE(message_id,url));
+      CREATE INDEX IF NOT EXISTS campaign_messages ON messages(campaign_id,lead_id);
       CREATE TABLE IF NOT EXISTS runtime_lock(id INTEGER PRIMARY KEY,owner TEXT,expires INTEGER);
       CREATE TABLE IF NOT EXISTS images(id TEXT PRIMARY KEY,mime TEXT NOT NULL,data BLOB NOT NULL,created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS warmup_placement(id TEXT PRIMARY KEY,mailbox_id TEXT NOT NULL REFERENCES mailboxes(id),message_id TEXT NOT NULL,provider TEXT NOT NULL,placement TEXT NOT NULL,folder TEXT NOT NULL,observed_at INTEGER NOT NULL,rescued_at INTEGER NOT NULL DEFAULT 0,UNIQUE(mailbox_id,message_id,placement));
@@ -98,6 +101,15 @@ export class Store {
       if (!columns.has(name))
         this.db.exec(`ALTER TABLE messages ADD COLUMN ${name} TEXT`);
     this.warmupScenarios = loadWarmupScenarios();
+    if (
+      !this.db
+        .prepare("PRAGMA table_info(leads)")
+        .all()
+        .some((c) => c.name === "preparation_error")
+    )
+      this.db.exec(
+        "ALTER TABLE leads ADD COLUMN preparation_error TEXT NOT NULL DEFAULT ''",
+      );
   }
   close() {
     this.db.close();
@@ -533,6 +545,7 @@ export class Store {
       mailboxIds,
       schedule: validateSchedule(input.schedule || defaultSchedule),
       trackOpens: !!input.trackOpens,
+      trackClicks: !!input.trackClicks,
     };
     this.db
       .prepare(
@@ -555,6 +568,44 @@ export class Store {
           )
           .all(r.id),
       }));
+  }
+  leadPage(id, filters) {
+    return queryLeads(this.db, id, filters);
+  }
+  trackedLink(message, address, publicURL) {
+    const url = new URL(address);
+    requireValue(
+      ["http:", "https:"].includes(url.protocol) &&
+        !url.username &&
+        !url.password,
+      "Недопустимая ссылка",
+    );
+    if (
+      url.origin === new URL(publicURL).origin &&
+      /^\/(unsubscribe|open|click)\//.test(url.pathname)
+    )
+      return address;
+    this.db
+      .prepare(
+        "INSERT OR IGNORE INTO tracked_links(token,message_id,url) VALUES(?,?,?)",
+      )
+      .run(randomBytes(24).toString("hex"), message.id, url.href);
+    const link = this.db
+      .prepare("SELECT token FROM tracked_links WHERE message_id=? AND url=?")
+      .get(message.id, url.href);
+    return `${publicURL}/click/${link.token}`;
+  }
+  followLink(token) {
+    const link = this.db
+      .prepare(
+        "SELECT t.* FROM tracked_links t JOIN messages m ON m.id=t.message_id WHERE t.token=? AND m.kind='campaign'",
+      )
+      .get(token);
+    if (!link) return null;
+    this.db
+      .prepare("INSERT OR IGNORE INTO events VALUES(?,?,?,?)")
+      .run(randomUUID(), link.message_id, "click", Date.now());
+    return link.url;
   }
   campaign(id) {
     const r = this.db.prepare("SELECT * FROM campaigns WHERE id=?").get(id);
@@ -725,10 +776,18 @@ export class Store {
             this.mailbox(mid),
             l.step,
           );
-        } catch {
+        } catch (error) {
           this.db
-            .prepare("UPDATE leads SET status='invalid' WHERE id=?")
-            .run(l.id);
+            .prepare(
+              "UPDATE leads SET status='invalid',preparation_error=? WHERE id=?",
+            )
+            .run(
+              String(error.message || "Ошибка подготовки письма").slice(
+                0,
+                2000,
+              ),
+              l.id,
+            );
           continue;
         }
         const previous = this.db

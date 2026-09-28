@@ -1,4 +1,5 @@
 import { mountEditor } from "/editor.js";
+import { mountLeads } from "/leads.js";
 const root = document.querySelector("#app");
 const escape = (s) =>
   String(s ?? "").replace(
@@ -261,7 +262,7 @@ function campaigns() {
     (b) =>
       (b.onclick = action(async () => {
         current = await api("/campaigns/" + b.dataset.campaign);
-        activeTab = "sequence";
+        activeTab = "leads";
         stepIndex = 0;
         importCSV = "";
         parsed = null;
@@ -294,6 +295,7 @@ function readEditor() {
       ),
     };
     current.trackOpens = document.querySelector("#track").checked;
+    current.trackClicks = document.querySelector("#track-clicks").checked;
   }
 }
 async function saveCampaign() {
@@ -352,15 +354,8 @@ function renderCampaign() {
   );
   const box = document.querySelector("#campaign-content");
   if (activeTab === "leads") {
-    box.innerHTML = `<div class="panel"><h2>Контакты из таблицы</h2><p class="hint">CSV до 10 МБ и 10 000 строк. Обязателен email. Колонки «Письмо 1», «Письмо 2»… станут шагами цепочки. <a href="/api/template.csv">Скачать шаблон</a></p>${editable ? '<label>Выберите CSV<input id="csv" type="file" accept=".csv,text/csv"></label>' : ""}<div id="import-result">${parsed ? `Готово к импорту: ${parsed.contacts.length}. Ошибки: ${parsed.errors.length}. Нажмите «Сохранить».` : ""}</div></div><div class="panel table-scroll"><h2>Лиды · ${current.leads.length}</h2><table><tr><th>Email</th><th>Имя</th><th>Статус</th><th class="num">Шаг</th><th>Следующее письмо</th></tr>${current.leads
-      .slice(0, 200)
-      .map(
-        (l) =>
-          `<tr><td>${escape(l.email)}</td><td>${escape(l.fields.name || l.fields["Имя"])}</td><td>${badge(l.status)}</td><td class="num">${l.step + 1}</td><td>${l.status === "pending" ? date(l.due) : "—"}</td></tr>`,
-      )
-      .join(
-        "",
-      )}</table>${current.leads.length > 200 ? '<p class="hint">Показаны первые 200 контактов.</p>' : ""}</div>`;
+    box.innerHTML = `<div class="panel"><h2>Контакты из таблицы</h2><p class="hint">CSV до 10 МБ и 10 000 строк. Обязателен email. Колонки «Письмо 1», «Письмо 2»… станут шагами цепочки. <a href="/api/template.csv">Скачать шаблон</a></p>${editable ? '<label>Выберите CSV<input id="csv" type="file" accept=".csv,text/csv"></label>' : ""}<div id="import-result">${parsed ? `Готово к импорту: ${parsed.contacts.length}. Ошибки: ${parsed.errors.length}. Нажмите «Сохранить».` : ""}</div></div><div class="panel" id="lead-browser"></div>`;
+    mountLeads(box.querySelector("#lead-browser"), current, api, notice);
     document.querySelector("#csv")?.addEventListener(
       "change",
       action(async (e) => {
@@ -457,7 +452,7 @@ function renderCampaign() {
   }
   if (activeTab === "settings") {
     const s = current.schedule;
-    box.innerHTML = `<fieldset ${editable ? "" : "disabled"}><div class="panel"><label>Название<input id="campaign-name" value="${escape(current.name)}"></label><h2>Отправители</h2>${state.mailboxes.length ? state.mailboxes.map((m) => `<label class="check"><input name="sender" type="checkbox" value="${m.id}" ${current.mailboxIds.includes(m.id) ? "checked" : ""}>${escape(m.email)} · ${m.verified ? "подключён" : "не проверен"}</label>`).join("") : '<p class="hint">Сначала добавьте почту в разделе «Почты».</p>'}</div><div class="panel"><h2>Расписание</h2><div class="row">${["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"].map((d, i) => `<label class="check"><input type="checkbox" name="weekday" value="${i}" ${s.days.includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div><div class="grid"><label>Начиная с<input id="schedule-start" type="time" value="${s.start}"></label><label>Заканчивая в<input id="schedule-end" type="time" value="${s.end}"></label><label>Часовой пояс<input id="timezone" value="${escape(s.timezone)}"></label><label>Минимум минут между отправками с ящика<input id="interval" type="number" min="1" value="${s.interval}"></label></div><label class="check"><input id="track" type="checkbox" ${current.trackOpens ? "checked" : ""}>Отслеживать открытия</label><p class="hint">Открытие — сигнал загрузки пикселя, а не гарантия прочтения. Лимит ящика общий для всех кампаний, ручных ответов и прогрева, за последние 24 часа.</p></div></fieldset>`;
+    box.innerHTML = `<fieldset ${editable ? "" : "disabled"}><div class="panel"><label>Название<input id="campaign-name" value="${escape(current.name)}"></label><h2>Отправители</h2>${state.mailboxes.length ? state.mailboxes.map((m) => `<label class="check"><input name="sender" type="checkbox" value="${m.id}" ${current.mailboxIds.includes(m.id) ? "checked" : ""}>${escape(m.email)} · ${m.verified ? "подключён" : "не проверен"}</label>`).join("") : '<p class="hint">Сначала добавьте почту в разделе «Почты».</p>'}</div><div class="panel"><h2>Расписание</h2><div class="row">${["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"].map((d, i) => `<label class="check"><input type="checkbox" name="weekday" value="${i}" ${s.days.includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div><div class="grid"><label>Начиная с<input id="schedule-start" type="time" value="${s.start}"></label><label>Заканчивая в<input id="schedule-end" type="time" value="${s.end}"></label><label>Часовой пояс<input id="timezone" value="${escape(s.timezone)}"></label><label>Минимум минут между отправками с ящика<input id="interval" type="number" min="1" value="${s.interval}"></label></div><label class="check"><input id="track" type="checkbox" ${current.trackOpens ? "checked" : ""}>Отслеживать открытия</label><label class="check"><input id="track-clicks" type="checkbox" ${current.trackClicks ? "checked" : ""}>Отслеживать переходы по ссылкам</label><p class="hint">Открытие — сигнал загрузки пикселя, а не гарантия прочтения. Лимит ящика общий для всех кампаний, ручных ответов и прогрева, за последние 24 часа.</p></div></fieldset>`;
   }
   if (activeTab === "results") {
     box.innerHTML = current.id

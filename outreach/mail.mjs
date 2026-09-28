@@ -88,6 +88,10 @@ export class MailGateway {
       message,
       (id) => this.store.image(id),
       true,
+      message.kind === "campaign" &&
+        this.store.campaign(message.campaign_id).trackClicks
+        ? (url) => this.store.trackedLink(message, url, this.publicURL)
+        : undefined,
     );
     const text =
       formatted.text +
