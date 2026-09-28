@@ -1,5 +1,11 @@
 import { mountEditor } from "/editor.js";
 import { mountLeads } from "/leads.js";
+import {
+  fileToImportPayload,
+  importTargets,
+  mappingFromTargetValue,
+  mappingTargetValue,
+} from "/importer.js";
 const root = document.querySelector("#app");
 const escape = (s) =>
   String(s ?? "").replace(
@@ -61,6 +67,7 @@ let state = { mailboxes: [], campaigns: [] },
   stepIndex = 0,
   importCSV = "",
   parsed = null,
+  importSession = null,
   inboxCampaign = "",
   threadId = "",
   analyticsCampaign = "",
@@ -256,6 +263,7 @@ function campaigns() {
     stepIndex = 0;
     importCSV = "";
     parsed = null;
+    importSession = null;
     renderCampaign();
   });
   document.querySelectorAll("[data-campaign]").forEach(
@@ -266,6 +274,7 @@ function campaigns() {
         stepIndex = 0;
         importCSV = "";
         parsed = null;
+        importSession = null;
         renderCampaign();
       })),
   );
@@ -301,16 +310,222 @@ function readEditor() {
 async function saveCampaign() {
   readEditor();
   current = await api("/campaigns", current);
-  if (importCSV) {
-    await api("/campaigns/" + current.id + "/import", { csv: importCSV });
-    importCSV = "";
-    parsed = null;
-    current = await api("/campaigns/" + current.id);
-  }
   state = await api("/state");
   notice("Кампания сохранена");
   renderCampaign();
 }
+function renderImportWizard(session) {
+  const { table, mappings, review } = session;
+  const selectedSheet = table.sheetId || session.source.sheetId || "";
+  const sheetPicker =
+    session.source.format === "xlsx" && table.sheets?.length > 1
+      ? `<label>Лист Excel<select id="import-sheet">${table.sheets.map((sheet) => `<option value="${escape(sheet.id)}" ${sheet.id === selectedSheet ? "selected" : ""}>${escape(sheet.name)}</option>`).join("")}</select></label>`
+      : "";
+  const mappingRows = table.columns
+    .map((column) => {
+      const mapping = mappings.find((item) => item.columnId === column.id) || {
+        columnId: column.id,
+        target: "skip",
+      };
+      const targetValue = mappingTargetValue(mapping.target);
+      const selected = importTargets.some(
+        (target) => target.value === targetValue,
+      )
+        ? targetValue
+        : "skip";
+      return `<tr><td>${escape(column.header || `Колонка ${column.position + 1}`)}<small class="hint">№ ${column.position + 1}</small></td><td><select data-import-map="${escape(column.id)}">${importTargets.map((target) => `<option value="${escape(target.value)}" ${target.value === selected ? "selected" : ""}>${escape(target.label)}</option>`).join("")}</select>${selected === "custom" ? `<input data-variable-name="${escape(column.id)}" maxlength="64" value="${escape(mapping.variableName || column.header)}" placeholder="Например: Направление">` : ""}</td><td>${column.samples.map((sample) => `<span class="sample-value">${escape(sample.slice(0, 160))}</span>`).join("<br>") || "—"}</td></tr>`;
+    })
+    .join("");
+  const examples = review?.contacts
+    .slice(0, 5)
+    .map((contact) => {
+      const fields = Object.entries(contact.fields || {})
+        .filter(([key, value]) => key !== "email" && String(value).trim())
+        .slice(0, 6)
+        .map(([key, value]) => `${key}: ${String(value).slice(0, 100)}`)
+        .join(" · ");
+      return `<li>${escape(contact.email)}${fields ? ` — ${escape(fields)}` : ""}</li>`;
+    })
+    .join("");
+  const existingSequence =
+    current.id && current.steps?.length
+      ? `<div class="alert"><strong>Текущая цепочка останется без изменений</strong><ol>${current.steps
+          .map(
+            (step, index) =>
+              `<li>Письмо ${index + 1}: ${escape(step.subject || "тема предыдущего письма")}</li>`,
+          )
+          .join("")}</ol></div>`
+      : "";
+  const reviewBox = review
+    ? `<section class="import-review"><div class="import-counts"><strong>К импорту: ${review.importable}</strong><span>Будут пропущены: ${review.skippedCount}</span><span>Ошибки строк: ${review.errorCount}</span></div>${examples ? `<h3>Примеры полей после сопоставления</h3><ul>${examples}</ul>` : ""}${
+        review.errors.length
+          ? `<h3>Строки с ошибками</h3><ul>${review.errors
+              .slice(0, 20)
+              .map(
+                (item) =>
+                  `<li>Строка ${item.sourceRow}: ${escape(item.reason)}</li>`,
+              )
+              .join("")}</ul>`
+          : ""
+      }${
+        review.skipped.length
+          ? `<h3>Будут пропущены</h3><ul>${review.skipped
+              .slice(0, 20)
+              .map(
+                (item) =>
+                  `<li>Строка ${item.sourceRow}, ${escape(item.email)}: ${escape(item.reason)}</li>`,
+              )
+              .join("")}</ul>`
+          : ""
+      }${review.steps.length ? `<p class="hint">Найдены колонки для ${review.steps.length} писем:</p><ol>${review.steps.map((step, index) => `<li>Письмо ${index + 1}: ${escape(step.body)}</li>`).join("")}</ol>` : ""}<label class="check"><input id="skip-existing" type="checkbox" ${session.skipExisting ? "checked" : ""}>Пропускать контакты, уже загруженные в любую кампанию. В текущей кампании повторы пропускаются всегда.</label>${existingSequence}${review.steps.length ? `<label class="check"><input id="replace-steps" type="checkbox" ${session.replaceSteps ? "checked" : ""}>Заменить текущую цепочку письмами из таблицы</label>` : ""}<p id="review-stale" class="alert" ${session.reviewStale ? "" : "hidden"}>Настройки импорта изменились. Обновите проверку перед подтверждением.</p><div class="actions"><button id="import-check">Обновить проверку</button><button id="import-confirm" class="primary" ${review.importable && !session.reviewStale ? "" : "disabled"}>Импортировать ${review.importable} контактов</button></div></section>`
+    : "";
+  return `${sheetPicker}<p>Строк в листе: ${table.total}. Настройте каждую колонку. Повторяющиеся названия различаются по позиции и не теряют данные.</p><div class="table-scroll"><table class="import-map-table"><thead><tr><th>Колонка в файле</th><th>Импортировать как</th><th>Примеры</th></tr></thead><tbody>${mappingRows}</tbody></table></div><div class="actions"><button id="import-preview" class="primary">Проверить и показать результат</button><button id="import-cancel">Отменить</button></div>${reviewBox}`;
+}
+
+function wireImportWizard() {
+  document.querySelector("#import-cancel")?.addEventListener("click", () => {
+    importSession = null;
+    parsed = null;
+    renderCampaign();
+  });
+  document.querySelector("#import-sheet")?.addEventListener(
+    "change",
+    action(async (event) => {
+      const table = await api("/import/preview", {
+        ...importSession.source,
+        sheetId: event.target.value,
+      });
+      importSession.source.sheetId = table.sheetId;
+      importSession.table = table;
+      importSession.mappings = table.suggestedMappings;
+      importSession.review = null;
+      importSession.reviewStale = false;
+      parsed = null;
+      renderCampaign();
+    }),
+  );
+  document.querySelectorAll("[data-import-map]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const columnId = select.dataset.importMap;
+      const previous = importSession.mappings.find(
+        (mapping) => mapping.columnId === columnId,
+      ) || { columnId };
+      previous.target = mappingFromTargetValue(select.value);
+      if (select.value === "custom" && !previous.variableName)
+        previous.variableName =
+          importSession.table.columns.find((column) => column.id === columnId)
+            ?.header || "";
+      importSession.mappings = importSession.mappings
+        .filter((mapping) => mapping.columnId !== columnId)
+        .concat(previous);
+      importSession.review = null;
+      importSession.reviewStale = false;
+      parsed = null;
+      renderCampaign();
+    });
+  });
+  document.querySelectorAll("[data-variable-name]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const mapping = importSession.mappings.find(
+        (item) => item.columnId === input.dataset.variableName,
+      );
+      if (mapping) mapping.variableName = input.value.trim();
+      importSession.review = null;
+      importSession.reviewStale = false;
+      parsed = null;
+      renderCampaign();
+    });
+  });
+  const preview = async () => {
+    readEditor();
+    importSession.skipExisting =
+      document.querySelector("#skip-existing")?.checked ??
+      importSession.skipExisting;
+    importSession.replaceSteps =
+      document.querySelector("#replace-steps")?.checked ??
+      importSession.replaceSteps;
+    const result = await api("/import/preview", {
+      ...importSession.source,
+      mappings: importSession.mappings,
+      campaignId: current.id,
+      skipExisting: importSession.skipExisting,
+    });
+    importSession.table = result;
+    importSession.review = result.preview;
+    importSession.reviewStale = false;
+    parsed = { headers: result.preview.variables };
+    renderCampaign();
+  };
+  document
+    .querySelector("#import-preview")
+    ?.addEventListener("click", action(preview));
+  document
+    .querySelector("#import-check")
+    ?.addEventListener("click", action(preview));
+  for (const id of ["skip-existing", "replace-steps"])
+    document.querySelector(`#${id}`)?.addEventListener("change", () => {
+      if (id === "skip-existing")
+        importSession.skipExisting =
+          document.querySelector("#skip-existing").checked;
+      if (id === "replace-steps")
+        importSession.replaceSteps =
+          document.querySelector("#replace-steps").checked;
+      importSession.reviewStale = true;
+      const confirmButton = document.querySelector("#import-confirm");
+      if (confirmButton) confirmButton.disabled = true;
+      const staleMessage = document.querySelector("#review-stale");
+      if (staleMessage) staleMessage.hidden = false;
+    });
+  document.querySelector("#import-confirm")?.addEventListener(
+    "click",
+    action(async () => {
+      readEditor();
+      const review = importSession.review;
+      if (!review || importSession.reviewStale || !review.importable)
+        throw new Error("Сначала проверьте таблицу и исправьте сопоставление");
+      if (review.steps.length && importSession.replaceSteps) {
+        if (
+          current.id &&
+          !confirm(
+            "Заменить уже существующую цепочку писем текстами из таблицы? Это изменит черновик кампании.",
+          )
+        )
+          return;
+        const subject =
+          review.steps[0].subject || current.steps[0]?.subject || "";
+        if (!subject.trim())
+          throw new Error(
+            "Заполните тему первого письма во вкладке «Цепочка» или сопоставьте колонку «Тема цепочки»",
+          );
+        current.steps = review.steps.map((step, index) => ({
+          ...step,
+          subject: index === 0 ? subject : step.subject,
+          format: "plain",
+          includeSignature: true,
+        }));
+        stepIndex = 0;
+      } else if (!current.id) {
+        throw new Error(
+          "Сначала добавьте текст первого письма во вкладке «Цепочка» и сохраните кампанию",
+        );
+      }
+      current = await api("/campaigns", current);
+      const result = await api(`/campaigns/${current.id}/import`, {
+        ...importSession.source,
+        mappings: importSession.mappings,
+        skipExisting: importSession.skipExisting,
+        replaceSteps: importSession.replaceSteps,
+      });
+      importSession = null;
+      parsed = null;
+      current = await api(`/campaigns/${current.id}`);
+      state = await api("/state");
+      notice(`Импортировано контактов: ${result.added}`);
+      renderCampaign();
+    }),
+  );
+}
+
 function renderCampaign() {
   const editable = current.status === "draft";
   shell(
@@ -354,42 +569,39 @@ function renderCampaign() {
   );
   const box = document.querySelector("#campaign-content");
   if (activeTab === "leads") {
-    box.innerHTML = `<div class="panel"><h2>Контакты из таблицы</h2><p class="hint">CSV до 10 МБ и 10 000 строк. Обязателен email. Колонки «Письмо 1», «Письмо 2»… станут шагами цепочки. <a href="/api/template.csv">Скачать шаблон</a></p>${editable ? '<label>Выберите CSV<input id="csv" type="file" accept=".csv,text/csv"></label>' : ""}<div id="import-result">${parsed ? `Готово к импорту: ${parsed.contacts.length}. Ошибки: ${parsed.errors.length}. Нажмите «Сохранить».` : ""}</div></div><div class="panel" id="lead-browser"></div>`;
+    box.innerHTML = `<div class="panel"><h2>Импорт контактов</h2><p class="hint">Загрузите CSV или Excel (.xlsx) до 10 МБ. Сопоставьте колонки с полями и переменными писем. Проверяется формат email и повторы в этой таблице и других кампаниях; существующая цепочка меняется только по вашему выбору. <a href="/api/template.csv">Скачать CSV-шаблон</a></p>${editable && !importSession ? '<label>Выберите таблицу<input id="import-file" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>' : ""}<div id="import-wizard">${editable && importSession ? renderImportWizard(importSession) : ""}</div></div><div class="panel" id="lead-browser"></div>`;
     mountLeads(box.querySelector("#lead-browser"), current, api, notice);
-    document.querySelector("#csv")?.addEventListener(
+    document.querySelector("#import-file")?.addEventListener(
       "change",
       action(async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (file.size > 10_000_000)
-          throw new Error("Максимальный размер — 10 МБ");
-        const csv = await file.text();
-        parsed = await api("/import/preview", { csv });
-        if (parsed.errors.length) {
-          importCSV = "";
-          document.querySelector("#import-result").textContent = parsed.errors
-            .slice(0, 15)
-            .map((r) => `Строка ${r.row}: ${r.error}`)
-            .join(" · ");
-          return;
-        }
-        importCSV = csv;
-        if (parsed.steps.length)
-          current.steps = parsed.steps.map((s) => ({
-            ...s,
-            format: "markdown",
-            includeSignature: true,
-          }));
-        stepIndex = 0;
+        const source = await fileToImportPayload(file);
+        const table = await api("/import/preview", source);
+        importSession = {
+          source,
+          table,
+          mappings: table.suggestedMappings,
+          review: null,
+          skipExisting: true,
+          replaceSteps: !current.id,
+        };
         renderCampaign();
       }),
     );
+    if (importSession) wireImportWizard();
   }
   if (activeTab === "sequence") {
     const s = current.steps[stepIndex] || current.steps[0];
     const variables = [
       ...new Set([
-        ...(parsed?.headers || Object.keys(current.leads[0]?.fields || {})),
+        ...(parsed?.headers || [
+          ...new Set(
+            (current.leads || []).flatMap((lead) =>
+              Object.keys(lead.fields || {}),
+            ),
+          ),
+        ]),
         "Имя Отправителя",
         "Фамилия Отправителя",
         "Email Отправителя",

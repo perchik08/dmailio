@@ -1723,3 +1723,42 @@ td.num .warmup-score-head b {
     grid-template-columns: 1fr;
   }
 }
+.import-map-table {
+  min-width: 720px;
+}
+.import-map-table td:first-child {
+  min-width: 170px;
+  font-weight: 600;
+}
+.import-map-table td:nth-child(2) {
+  min-width: 250px;
+}
+.import-map-table td:nth-child(2) select,
+.import-map-table td:nth-child(2) input {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.import-map-table td small {
+  display: block;
+}
+.sample-value {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: var(--type-sm);
+}
+.import-review {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.import-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-bottom: 12px;
+}
+.import-review ul {
+  max-height: 220px;
+  overflow: auto;
+  padding-left: 22px;
+}
