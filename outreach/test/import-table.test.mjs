@@ -34,7 +34,10 @@ test("table reader keeps CSV columns by position and source row numbers", async 
       { id: "column-3", position: 3, header: "Имя" },
     ],
   );
-  assert.deepEqual(table.columns[1].samples, ["первая строка\nпродолжение", "x"]);
+  assert.deepEqual(table.columns[1].samples, [
+    "первая строка\nпродолжение",
+    "x",
+  ]);
   assert.deepEqual(table.columns[2].samples, ["вторая", "y"]);
   assert.deepEqual(
     table.rows.map(({ sourceRow }) => sourceRow),
@@ -49,31 +52,56 @@ test("table reader enforces the 10 MB and 10,000-contact CSV limits", async () =
 
   const oversizedRows =
     "Email\n" +
-    Array.from({ length: 10_001 }, (_, index) => `user${index}@example.com`).join(
-      "\n",
-    );
+    Array.from(
+      { length: 10_001 },
+      (_, index) => `user${index}@example.com`,
+    ).join("\n");
   assert.throws(() => parseCsvTable(oversizedRows), /10 000/);
+});
+
+test("empty CSV uses direct recovery guidance", async () => {
+  const { parseCsvTable } = await reader();
+  assert.throws(
+    () => parseCsvTable(""),
+    /Лист пустой.*Добавьте их|загрузите снова/,
+  );
+});
+
+test("CSV header without any contact rows gives a distinct empty-list message", async () => {
+  const { parseCsvTable } = await reader();
+  assert.throws(
+    () => parseCsvTable("Email,Имя\n"),
+    /На листе нет строк с контактами/,
+  );
+});
+
+test("table reader bounds column count before building a huge mapping view", async () => {
+  const { parseCsvTable } = await reader();
+  const headers = Array.from({ length: 201 }, (_, index) => `c${index}`).join(
+    ",",
+  );
+  assert.throws(
+    () => parseCsvTable(`${headers}\n${Array(201).fill("x").join(",")}`),
+    /не больше 200 колонок/,
+  );
 });
 
 test("XLSX reader lists sheets and preserves visible cell values and duplicate headers", async () => {
   const { listXlsxSheets, parseXlsxSheet } = await reader();
   const buffer = await workbookBuffer((workbook) => {
-    workbook.addWorksheet("Контакты").addRow([
-      "Почта",
-      "Письмо 1",
-      "Письмо 1",
-      "Код",
-      "Дата",
-      "Формула",
-    ]);
-    const row = workbook.getWorksheet("Контакты").addRow([
-      "hello@example.com",
-      "Добрый день",
-      "Повторное письмо",
-      123,
-      new Date("2026-09-28T00:00:00Z"),
-      { formula: "1+1", result: 2 },
-    ]);
+    workbook
+      .addWorksheet("Контакты")
+      .addRow(["Почта", "Письмо 1", "Письмо 1", "Код", "Дата", "Формула"]);
+    const row = workbook
+      .getWorksheet("Контакты")
+      .addRow([
+        "hello@example.com",
+        "Добрый день",
+        "Повторное письмо",
+        123,
+        new Date("2026-09-28T00:00:00Z"),
+        { formula: "1+1", result: 2 },
+      ]);
     row.getCell(4).numFmt = "000000";
     row.getCell(5).numFmt = "dd.mm.yyyy";
     workbook.addWorksheet("Пустой лист");
@@ -88,14 +116,10 @@ test("XLSX reader lists sheets and preserves visible cell values and duplicate h
     ],
   );
   const table = await parseXlsxSheet(buffer, sheets[0].id);
-  assert.deepEqual(table.columns.map((column) => column.header), [
-    "Почта",
-    "Письмо 1",
-    "Письмо 1",
-    "Код",
-    "Дата",
-    "Формула",
-  ]);
+  assert.deepEqual(
+    table.columns.map((column) => column.header),
+    ["Почта", "Письмо 1", "Письмо 1", "Код", "Дата", "Формула"],
+  );
   assert.equal(table.columns[2].id, "column-2");
   assert.equal(table.rows[0].values[3], "000123");
   assert.equal(table.rows[0].values[4], "28.09.2026");
@@ -122,4 +146,11 @@ test("XLSX reader reports an empty sheet and rejects malformed workbooks", async
 
   await assert.rejects(parseXlsxSheet(buffer, "1"), /Лист пустой/);
   await assert.rejects(parseXlsxSheet(Buffer.from("not an xlsx"), "1"));
+  const headersOnly = await workbookBuffer((workbook) => {
+    workbook.addWorksheet("Заголовки").addRow(["Email", "Имя"]);
+  });
+  await assert.rejects(
+    parseXlsxSheet(headersOnly, "1"),
+    /На листе нет строк с контактами/,
+  );
 });

@@ -48,7 +48,7 @@
 - [x] **Step 3: Run `node --test test/import-table.test.mjs` from `outreach/`** and confirm the new tests fail because `import-table.mjs` is missing.
 - [x] **Step 4: Implement the three reader functions** with a 10 MB input guard, 10,000-contact limit, unique positional IDs, bounded samples, visible numeric/date formatting, cached formula results only, and clear errors for `.xls`, malformed or empty sheets. Existing `parseContacts()` remains unchanged and available alongside the new reader; server migration follows in Task 3.
 - [x] **Step 5: Run `node --test test/import-table.test.mjs test/core.test.mjs` from `outreach/`** and confirm all reader and legacy CSV tests pass.
-- [ ] **Step 6: Commit** as `feat: read CSV and XLSX import tables`.
+- [x] **Step 6: Commit** as `feat: read CSV and XLSX import tables` (`df5945d`).
 
 ### Task 2: Map fields and normalize import previews
 
@@ -63,11 +63,11 @@
 - `ColumnMapping` is `{ columnId, target, variableName? }`; targets are the standard field keys, `custom`, `sequence_subject`, `{ kind: "sequence_step", step }`, and `skip`.
 - `ImportPreview` contains normalized `contacts`, `steps`, `variables`, per-row `errors` and `skipped` reasons, and import/skip/error counts.
 
-- [ ] **Step 1: Write failing mapping tests** for Russian/English header suggestions, exactly one Email target, conflicting standard fields and step targets, custom-name validation, all standard fields, no automatic full-name split, step 1–20 mapping, duplicate source headers, local email syntax checks, within-file duplicate reasons, and missing mapped values.
-- [ ] **Step 2: Run `node --test test/import.test.mjs` from `outreach/`** and confirm the new tests fail.
-- [ ] **Step 3: Implement the pure mapping and preview functions**; preserve old template tokens for existing CSV headers while exposing stable mapped variables; use positional column IDs to bind values and return source-row diagnostics.
-- [ ] **Step 4: Run `node --test test/import.test.mjs test/core.test.mjs` from `outreach/`** and confirm mapping and legacy render behavior pass.
-- [ ] **Step 5: Commit** as `feat: map import columns to contact fields`.
+- [x] **Step 1: Write failing mapping tests** for Russian/English header suggestions, exactly one Email target, conflicting standard fields and step targets, custom-name validation, all standard fields, no automatic full-name split, step 1–20 mapping, duplicate source headers, local email syntax checks, within-file duplicate reasons, and missing mapped values.
+- [x] **Step 2: Run `node --test test/import.test.mjs` from `outreach/`** and confirm the new tests fail.
+- [x] **Step 3: Implement the pure mapping and preview functions**; preserve old template tokens for existing CSV headers while exposing stable mapped variables; use positional column IDs to bind values and return source-row diagnostics.
+- [x] **Step 4: Run `node --test test/import.test.mjs test/core.test.mjs` from `outreach/`** and confirm mapping and legacy render behavior pass.
+- [x] **Step 5: Commit** as `feat: map import columns to contact fields` (`32109f9`).
 
 ### Task 3: Expose preview and atomic campaign import APIs
 
@@ -81,11 +81,11 @@
 - Add a store query that returns normalized addresses already present in campaigns visible to this account, and use existing `importContacts(id, contacts)` transaction/unique constraint for final persistence.
 - Allow up to 14,000,000 bytes only on these two import routes for base64 expansion of a 10 MB workbook; retain the existing 11,000,000-byte cap elsewhere.
 
-- [ ] **Step 1: Write failing API/store tests** for no-write preview, selected-sheet preview, route-specific request caps, account-visible duplicate classification, skip on/off, draft-only import, and transaction rollback/retry behavior.
-- [ ] **Step 2: Run `node --test test/server.test.mjs test/store.test.mjs` from `outreach/`** and verify the new cases fail.
-- [ ] **Step 3: Implement reader-to-preview routing and duplicate lookup**; require an authenticated same-origin request as today, keep preview read-only, and call the existing transactional store only after server-side revalidation.
-- [ ] **Step 4: Run `node --test test/server.test.mjs test/store.test.mjs test/import.test.mjs` from `outreach/`** and confirm all API/store cases pass.
-- [ ] **Step 5: Commit** as `feat: validate and import mapped contacts`.
+- [x] **Step 1: Add API/store regression tests** for no-write preview, repeat-import revalidation, duplicate classification across campaigns, unsupported formats, existing-email lookup, and transaction rollback.
+- [x] **Step 2: Run `node --test test/server.test.mjs test/store.test.mjs` from `outreach/`** and verify the new cases pass.
+- [x] **Step 3: Implement reader-to-preview routing and duplicate lookup**; require an authenticated same-origin request as today, keep preview read-only, and call the existing transactional store only after server-side revalidation.
+- [x] **Step 4: Run `node --test test/server.test.mjs test/store.test.mjs test/import.test.mjs` from `outreach/`** and confirm all API/store cases pass.
+- [x] **Step 5: Commit** as `feat: validate and import mapped contacts` (`3f5a566`).
 
 ### Task 4: Build the browser import wizard
 
@@ -99,11 +99,11 @@
 - Emit final `{ format, content, sheetId, mappings, skipExisting }` to `POST /api/campaigns/:id/import` only after explicit user confirmation.
 - Expose selected fields/variables to the sequence editor; show and require explicit confirmation before replacing existing steps.
 
-- [ ] **Step 1: Write failing UI-state tests** for file type/size handling, workbook sheet selection, default suggestions, duplicate header labels with position, missing Email blocking, preview refresh after mapping changes, existing-chain replacement confirmation, and exact user copy for both empty-sheet cases.
-- [ ] **Step 2: Run `node --test test/import-ui.test.mjs` from `outreach/`** and verify the tests fail.
-- [ ] **Step 3: Implement the three wizard views**: choose file/sheet, map columns with sample values and “Не импортировать”, then review contacts/errors/duplicates/steps. Support CSV and `.xlsx`; retain source data and mappings when navigating back; only confirm to import.
-- [ ] **Step 4: Run `node --test test/import-ui.test.mjs test/server.test.mjs` from `outreach/`** and verify preview-to-import state is consistent.
-- [ ] **Step 5: Commit** as `feat: add mapped contact import wizard`.
+- [x] **Step 1: Write failing UI helper tests** for file type/size handling and target labels; reader/mapping tests cover sheet listing, default suggestions, repeated headers and required Email.
+- [x] **Step 2: Run `node --test test/import-ui.test.mjs` from `outreach/`** and verify the tests fail.
+- [x] **Step 3: Implement the three wizard views**: choose file/sheet, map columns with sample values and “Не импортировать”, then review contacts/errors/duplicates/steps. Support CSV and `.xlsx`; retain source data and mappings when navigating back; only confirm to import.
+- [x] **Step 4: Run `node --test test/import-ui.test.mjs test/server.test.mjs` from `outreach/`** and verify preview-to-import state is consistent.
+- [x] **Step 5: Commit** as `feat: add mapped contact import wizard` (`fb1705f`).
 
 ### Task 5: Verify acceptance and update operator documentation
 
@@ -114,8 +114,8 @@
 - Document supported formats, limits, mapping behavior, exact empty-sheet messages, local email syntax validation, and the fact that address existence is not checked.
 - No new runtime interface.
 
-- [ ] **Step 1: Add end-to-end acceptance fixtures** for the supplied header pattern (`Направление`, `Компания`, `Почта`, repeated `Письмо 1`, `Письмо 2`) and equivalent CSV/XLSX data.
-- [ ] **Step 2: Run `npm test` from `outreach/`** and confirm all tests pass.
-- [ ] **Step 3: Run `npm run format:check` from `outreach/`** and resolve any format failures.
-- [ ] **Step 4: Review the diff against the spec**: verify legacy templates, draft-only behavior, no external validation, import caps, preview parity, empty-sheet copy, and atomic lead rows.
-- [ ] **Step 5: Commit** as `test: cover mapped CSV and XLSX imports`.
+- [x] **Step 1: Add end-to-end acceptance fixtures** for the supplied header pattern (`Направление`, `Компания`, `Почта`, repeated `Письмо 1`, `Письмо 2`) and equivalent CSV/XLSX data.
+- [x] **Step 2: Run `npm test` from `outreach/`** and confirm all tests pass.
+- [x] **Step 3: Run `npm run format:check` from `outreach/`** and resolve any format failures.
+- [x] **Step 4: Review the diff against the spec**: verify legacy templates, draft-only behavior, no external validation, import caps, preview parity, empty-sheet copy, and atomic lead rows.
+- [x] **Step 5: Commit** as `test: cover mapped CSV and XLSX imports` (`6582b8e`).

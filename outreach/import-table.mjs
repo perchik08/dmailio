@@ -4,11 +4,13 @@ import SSF from "ssf";
 
 export const MAX_IMPORT_BYTES = 10_000_000;
 export const MAX_IMPORT_CONTACTS = 10_000;
+export const MAX_IMPORT_COLUMNS = 200;
 const MAX_CSV_PHYSICAL_LINES = 100_000;
 const MAX_CELL_SIZE = 200_000;
 
 function requireFileSize(size) {
-  if (size > MAX_IMPORT_BYTES) throw new Error("Файл должен быть не больше 10 МБ");
+  if (size > MAX_IMPORT_BYTES)
+    throw new Error("Файл должен быть не больше 10 МБ");
 }
 
 function csvDelimiter(text) {
@@ -51,7 +53,8 @@ function columnSamples(rows, position) {
 }
 
 export function parseCsvTable(text) {
-  if (typeof text !== "string") throw new Error("CSV-файл прочитать не удалось");
+  if (typeof text !== "string")
+    throw new Error("CSV-файл прочитать не удалось");
   requireFileSize(Buffer.byteLength(text, "utf8"));
   const physicalLines = (text.match(/\r\n|\r|\n/g) || []).length + 1;
   if (physicalLines > MAX_CSV_PHYSICAL_LINES)
@@ -68,24 +71,45 @@ export function parseCsvTable(text) {
       skip_empty_lines: false,
     });
   } catch {
-    throw new Error("Не удалось прочитать CSV. Проверьте кавычки и разделители.");
+    throw new Error(
+      "Не удалось прочитать CSV. Проверьте кавычки и разделители.",
+    );
   }
 
-  if (!records.length) throw new Error("В CSV нет строки с названиями столбцов");
-  const headerRecord = records[0].record.map((value) => String(value ?? "").trim());
+  if (!records.length)
+    throw new Error(
+      "Лист пустой — в файле нет заголовков и данных. Добавьте их или выберите другой файл и загрузите снова.",
+    );
+  const headerRecord = records[0].record.map((value) =>
+    String(value ?? "").trim(),
+  );
   if (!headerRecord.length || !headerRecord.some(Boolean))
-    throw new Error("В CSV нет названий столбцов");
+    throw new Error(
+      "В CSV нет названий столбцов. Добавьте строку заголовков и загрузите файл снова.",
+    );
+  if (headerRecord.length > MAX_IMPORT_COLUMNS)
+    throw new Error("В таблице может быть не больше 200 колонок");
 
   const rows = [];
   for (const { record, info } of records.slice(1)) {
     const values = headerRecord.map((_, index) => String(record[index] ?? ""));
-    if (record.length > headerRecord.length && record.slice(headerRecord.length).some((v) => String(v ?? "").trim()))
-      throw new Error(`В строке ${recordStartLine(record, info.lines)} больше значений, чем заголовков`);
+    if (
+      record.length > headerRecord.length &&
+      record.slice(headerRecord.length).some((v) => String(v ?? "").trim())
+    )
+      throw new Error(
+        `В строке ${recordStartLine(record, info.lines)} больше значений, чем заголовков`,
+      );
     if (!values.some((value) => value.trim())) continue;
     rows.push({ sourceRow: recordStartLine(record, info.lines), values });
     if (rows.length > MAX_IMPORT_CONTACTS)
       throw new Error("В одном импорте может быть не больше 10 000 контактов");
   }
+
+  if (!rows.length)
+    throw new Error(
+      "На листе нет строк с контактами. Добавьте данные или выберите другой лист.",
+    );
 
   const columns = headerRecord.map((header, position) => ({
     id: `column-${position}`,
@@ -136,13 +160,25 @@ function displayValue(cell, date1904) {
   if (typeof value === "string") return value;
   if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
   if (typeof value === "object" && !(value instanceof Date)) {
-    if (Object.hasOwn(value, "formula") || Object.hasOwn(value, "sharedFormula")) {
-      if (!Object.hasOwn(value, "result") || value.result === null || value.result === undefined)
+    if (
+      Object.hasOwn(value, "formula") ||
+      Object.hasOwn(value, "sharedFormula")
+    ) {
+      if (
+        !Object.hasOwn(value, "result") ||
+        value.result === null ||
+        value.result === undefined
+      )
         return "";
       const result = value.result;
       if (result instanceof Date)
-        return formatNumber(excelSerial(result, date1904), cell.numFmt);
-      if (typeof result === "number") return formatNumber(result, cell.numFmt);
+        return formatNumber(
+          excelSerial(result, date1904),
+          cell.numFmt,
+          date1904,
+        );
+      if (typeof result === "number")
+        return formatNumber(result, cell.numFmt, date1904);
       return String(result);
     }
     if (Array.isArray(value.richText))
@@ -150,21 +186,38 @@ function displayValue(cell, date1904) {
     if (typeof value.text === "string") return value.text;
   }
   if (value instanceof Date)
-    return formatNumber(excelSerial(value, date1904), cell.numFmt || "yyyy-mm-dd");
-  if (typeof value === "number") return formatNumber(value, cell.numFmt);
+    return formatNumber(
+      excelSerial(value, date1904),
+      cell.numFmt || "yyyy-mm-dd",
+      date1904,
+    );
+  if (typeof value === "number")
+    return formatNumber(value, cell.numFmt, date1904);
   return String(value);
 }
 
-function formatNumber(value, format) {
+function formatNumber(value, format, date1904 = false) {
   if (!format || format === "General") return String(value);
-  const dateFormat = format.toLowerCase().match(/^(d{1,4})([.\-/])(m{1,4})\2(y{2,4})$/);
+  const dateFormat = format
+    .toLowerCase()
+    .match(/^(d{1,4})([.\-/])(m{1,4})\2(y{2,4})$/);
   if (dateFormat) {
-    const date = new Date(Math.round((value - 25_569) * 86_400_000));
+    const date = new Date(
+      Math.round((value - (date1904 ? 24_107 : 25_569)) * 86_400_000),
+    );
     const [dayToken, separator, monthToken, yearToken] = dateFormat.slice(1);
-    const day = String(date.getUTCDate()).padStart(dayToken.length > 1 ? 2 : 1, "0");
-    const month = String(date.getUTCMonth() + 1).padStart(monthToken.length > 1 ? 2 : 1, "0");
+    const day = String(date.getUTCDate()).padStart(
+      dayToken.length > 1 ? 2 : 1,
+      "0",
+    );
+    const month = String(date.getUTCMonth() + 1).padStart(
+      monthToken.length > 1 ? 2 : 1,
+      "0",
+    );
     const year = String(date.getUTCFullYear());
-    return [day, month, yearToken.length === 2 ? year.slice(-2) : year].join(separator);
+    return [day, month, yearToken.length === 2 ? year.slice(-2) : year].join(
+      separator,
+    );
   }
   try {
     return String(SSF.format(format, value));
@@ -189,14 +242,19 @@ export async function parseXlsxSheet(buffer, sheetId) {
     nonEmptyRows.push(row);
   });
   if (!nonEmptyRows.length)
-    throw new Error("Лист пустой — в нём нет данных. Выберите другой лист или добавьте данные в таблицу и загрузите файл снова.");
+    throw new Error(
+      "Лист пустой — в нём нет данных. Выберите другой лист или добавьте данные в таблицу и загрузите файл снова.",
+    );
 
   const headerRow = nonEmptyRows[0];
   const width = headerRow.cellCount;
+  if (width > MAX_IMPORT_COLUMNS)
+    throw new Error("В таблице может быть не больше 200 колонок");
   const headers = Array.from({ length: width }, (_, index) =>
     displayValue(headerRow.getCell(index + 1), workbook.properties.date1904),
   ).map((value) => value.trim());
-  if (!headers.some(Boolean)) throw new Error("В листе Excel нет названий столбцов");
+  if (!headers.some(Boolean))
+    throw new Error("В листе Excel нет названий столбцов");
 
   const rows = [];
   for (const row of nonEmptyRows.slice(1)) {
@@ -208,6 +266,11 @@ export async function parseXlsxSheet(buffer, sheetId) {
     if (rows.length > MAX_IMPORT_CONTACTS)
       throw new Error("В одном импорте может быть не больше 10 000 контактов");
   }
+
+  if (!rows.length)
+    throw new Error(
+      "На листе нет строк с контактами. Добавьте данные или выберите другой лист.",
+    );
 
   const columns = headers.map((header, position) => ({
     id: `column-${position}`,

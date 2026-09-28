@@ -4,33 +4,45 @@ const FIELD_TARGETS = new Set([
   "email",
   "first_name",
   "last_name",
+  "middle_name",
+  "full_name",
   "company",
   "position",
+  "department",
   "phone",
   "website",
   "industry",
   "region",
+  "country",
 ]);
 const FIELD_VARIABLES = {
   email: "Email",
   first_name: "Имя",
   last_name: "Фамилия",
+  middle_name: "Отчество",
+  full_name: "Полное имя",
   company: "Компания",
   position: "Должность",
+  department: "Отдел",
   phone: "Телефон",
   website: "Сайт",
   industry: "Отрасль",
   region: "Регион",
+  country: "Страна",
 };
-const FORBIDDEN_VARIABLES = new Set([
-  "__proto__",
-  "prototype",
-  "constructor",
-  "Имя Отправителя",
-  "Фамилия Отправителя",
-  "Email Отправителя",
-  "Подпись Отправителя",
-]);
+const FORBIDDEN_VARIABLES = new Set(
+  [
+    "__proto__",
+    "prototype",
+    "constructor",
+    "Имя Отправителя",
+    "Фамилия Отправителя",
+    "Email Отправителя",
+    "Подпись Отправителя",
+    ...Object.values(FIELD_VARIABLES),
+    "Тема цепочки",
+  ].map((name) => name.toLocaleLowerCase("ru-RU")),
+);
 
 function normalizedHeader(value) {
   return String(value || "")
@@ -54,6 +66,12 @@ const HEADER_ALIASES = new Map([
   ["фамилия", "last_name"],
   ["lastname", "last_name"],
   ["surname", "last_name"],
+  ["отчество", "middle_name"],
+  ["middlename", "middle_name"],
+  ["полноеимя", "full_name"],
+  ["fullname", "full_name"],
+  ["контактноелицо", "full_name"],
+  ["фио", "full_name"],
   ["компания", "company"],
   ["company", "company"],
   ["organization", "company"],
@@ -61,6 +79,8 @@ const HEADER_ALIASES = new Map([
   ["должность", "position"],
   ["position", "position"],
   ["title", "position"],
+  ["отдел", "department"],
+  ["department", "department"],
   ["телефон", "phone"],
   ["phone", "phone"],
   ["мобильный", "phone"],
@@ -73,6 +93,8 @@ const HEADER_ALIASES = new Map([
   ["region", "region"],
   ["город", "region"],
   ["city", "region"],
+  ["страна", "country"],
+  ["country", "country"],
 ]);
 
 export function suggestColumnMappings(columns) {
@@ -163,9 +185,7 @@ function validateMappings(table, mappings) {
         !name ||
         name.length > 64 ||
         !/^[\p{L}\p{N}_][\p{L}\p{N} _.-]*$/u.test(name) ||
-        FORBIDDEN_VARIABLES.has(name) ||
-        Object.values(FIELD_VARIABLES).includes(name) ||
-        name === "Тема цепочки" ||
+        FORBIDDEN_VARIABLES.has(name.toLocaleLowerCase("ru-RU")) ||
         /^Письмо\s+\d+$/.test(name)
       )
         throw new Error(
@@ -217,9 +237,6 @@ export function previewImport(table, mappings, options = {}) {
   const skipExisting = options.skipExisting !== false;
   const columns = new Map(
     table.columns.map((column) => [column.id, column.position]),
-  );
-  const byColumn = new Map(
-    mappings.map((mapping) => [mapping.columnId, mapping]),
   );
   const fieldMappings = mappings.filter(
     ({ target }) => typeof target === "string" && FIELD_TARGETS.has(target),
