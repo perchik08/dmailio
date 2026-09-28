@@ -6,7 +6,7 @@
 
 **Architecture:** Format readers produce one positional `ParsedTable` contract. A pure mapping/normalization module builds the preview and validates every row; the same server path recomputes it at confirmation and passes only accepted contacts to the store's transaction. The browser wizard selects a workbook sheet, edits mappings and shows the preview before saving.
 
-**Tech Stack:** Node.js 24+, native Node test runner, `csv-parse`, ExcelJS 4.4.0 for `.xlsx` reading, existing HTTP server, SQLite store, browser JavaScript.
+**Tech Stack:** Node.js 24+, native Node test runner, `csv-parse`, ExcelJS 4.4.0 for `.xlsx` reading, SSF 0.11.2 for Excel number/date display formats, existing HTTP server, SQLite store, browser JavaScript.
 
 **Spec:** `docs/superpowers/specs/2026-09-28-contact-import-mapping-design.md`
 
@@ -43,11 +43,12 @@
 - `ParsedTable` is `{ format, sheetId, sheetName, columns: [{ id, position, header, samples }], rows: [{ sourceRow, values }] }`; `id` is positional and unique even when headers repeat.
 - Add `exceljs@4.4.0`; use cached formula results only (ExcelJS is not a calculation engine).
 
-- [ ] **Step 1: Write failing reader tests** for UTF-8/BOM and quoted CSV, repeated headers, blank-line source rows, workbook sheet listing/selection, displayed cell values including leading-zero formatting, formula cached result/no cached result, and empty workbook/sheet behavior.
-- [ ] **Step 2: Run `npm test -- --test-name-pattern="table reader"` from `outreach/`** and confirm new tests fail because the reader module is missing.
-- [ ] **Step 3: Add `exceljs@4.4.0` and implement the three reader functions** with a 10 MB input guard, 10,000-contact limit, unique positional IDs, bounded samples, and clear errors for `.xls`, malformed or empty sheets. Preserve `parseContacts()` through an adapter until the server migration is complete.
-- [ ] **Step 4: Run `node --test test/import-table.test.mjs test/core.test.mjs` from `outreach/`** and confirm all reader and legacy CSV tests pass.
-- [ ] **Step 5: Commit** as `feat: read CSV and XLSX import tables`.
+- [x] **Step 1: Write failing reader tests** for UTF-8/BOM and quoted CSV, repeated headers, blank-line source rows, workbook sheet listing/selection, displayed cell values including leading-zero formatting, formula cached result/no cached result, and empty workbook/sheet behavior.
+- [x] **Step 2: Add the reader dependencies** `exceljs@4.4.0` and `ssf@0.11.2`; override ExcelJS's vulnerable uuid dependency to `11.1.1` so XLSX upload does not introduce the audited uuid advisory.
+- [x] **Step 3: Run `node --test test/import-table.test.mjs` from `outreach/`** and confirm the new tests fail because `import-table.mjs` is missing.
+- [x] **Step 4: Implement the three reader functions** with a 10 MB input guard, 10,000-contact limit, unique positional IDs, bounded samples, visible numeric/date formatting, cached formula results only, and clear errors for `.xls`, malformed or empty sheets. Existing `parseContacts()` remains unchanged and available alongside the new reader; server migration follows in Task 3.
+- [x] **Step 5: Run `node --test test/import-table.test.mjs test/core.test.mjs` from `outreach/`** and confirm all reader and legacy CSV tests pass.
+- [ ] **Step 6: Commit** as `feat: read CSV and XLSX import tables`.
 
 ### Task 2: Map fields and normalize import previews
 
