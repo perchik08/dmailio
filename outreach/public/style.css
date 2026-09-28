@@ -1582,3 +1582,144 @@ td.num .warmup-score-head b {
     grid-template-columns: 1fr 1fr;
   }
 }
+.lead-toolbar,
+.lead-pagination,
+.lead-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.lead-toolbar input {
+  width: min(320px, 100%);
+}
+.lead-toolbar h2 span {
+  color: #6266c3;
+  font-weight: 500;
+  font-size: 16px;
+}
+.lead-active,
+.lead-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lead-active {
+  margin: 16px 0;
+}
+.lead-table th,
+.lead-table td {
+  vertical-align: top;
+}
+.lead-table td:first-child {
+  min-width: 240px;
+}
+.lead-table td:nth-child(2) {
+  min-width: 260px;
+}
+.lead-table td:nth-child(3) {
+  min-width: 90px;
+  white-space: nowrap;
+}
+.lead-table td:nth-child(4) {
+  min-width: 180px;
+}
+#lead-results .table-scroll {
+  max-height: 65vh;
+}
+.lead-table th {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 1;
+}
+.lead-table td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.lead-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lead-completed,
+.lead-contacted {
+  background: #eff0ff;
+  color: #474ca9;
+}
+.lead-replied,
+.lead-opened,
+.lead-clicked {
+  background: #e9f5ee;
+  color: #28623f;
+}
+.lead-bounced,
+.lead-unsubscribed {
+  background: #fff0ee;
+  color: #973a30;
+}
+.lead-pagination {
+  margin-top: 20px;
+  justify-content: center;
+}
+.lead-empty {
+  padding: 64px 20px;
+  text-align: center;
+}
+.lead-filter-dialog {
+  width: min(760px, calc(100vw - 32px));
+  border-radius: 18px;
+}
+.lead-filter-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+}
+.lead-filter-actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.lead-filter-actions select {
+  width: 90px;
+  flex: 0 0 90px;
+  margin-left: auto;
+  padding: 6px;
+}
+.lead-toolbar > .row {
+  max-width: none;
+  width: auto;
+  flex-wrap: wrap;
+}
+.lead-toolbar > .row > input {
+  flex: 1 1 240px;
+}
+.lead-dialog-footer {
+  position: sticky;
+  bottom: -30px;
+  padding: 14px 0;
+  background: white;
+}
+.lead-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.lead-field-row input,
+.lead-field-row select {
+  min-width: 0;
+}
+.lead-dialog-footer {
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+@media (max-width: 640px) {
+  .lead-filter-actions,
+  .lead-field-row {
+    grid-template-columns: 1fr;
+  }
+}

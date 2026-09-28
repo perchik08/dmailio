@@ -52,6 +52,13 @@ export function createApp({
       const path = url.pathname;
       const method = req.method;
       if (path === "/healthz") return send({ ok: true });
+      const link = path.match(/^\/click\/([a-f0-9]{48})$/);
+      if (link && method === "GET") {
+        const target = store.followLink(link[1]);
+        if (!target) return send({ error: "Ссылка не найдена" }, 404);
+        res.writeHead(302, { Location: target });
+        return res.end();
+      }
       const opt = path.match(/^\/unsubscribe\/([a-f0-9]{48})$/);
       if (opt) {
         if (method === "POST") {
@@ -248,6 +255,9 @@ export function createApp({
       }
       if (path === "/api/campaigns" && method === "POST")
         return send(store.saveCampaign(data), 201);
+      const leads = path.match(/^\/api\/campaigns\/([^/]+)\/leads$/);
+      if (leads && method === "POST")
+        return send(store.leadPage(leads[1], data));
       const campaign = path.match(
         /^\/api\/campaigns\/([^/]+)(?:\/(import|status|preview))?$/,
       );
@@ -347,7 +357,7 @@ export function createApp({
       }
       if (
         method === "GET" &&
-        ["/", "/app.js", "/editor.js", "/style.css"].includes(path)
+        ["/", "/app.js", "/editor.js", "/leads.js", "/style.css"].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);
         return send(
