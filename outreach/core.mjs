@@ -27,8 +27,8 @@ export function email(value) {
 }
 export function parseContacts(csv) {
   requireValue(
-    typeof csv === "string" && Buffer.byteLength(csv) <= 10_000_000,
-    "CSV: максимум 10 МБ",
+    typeof csv === "string" && Buffer.byteLength(csv) <= 25_000_000,
+    "CSV: максимум 25 МБ",
   );
   const first = csv.replace(/^\uFEFF/, "").split(/\r?\n/)[0];
   const delimiter = first.includes(";")

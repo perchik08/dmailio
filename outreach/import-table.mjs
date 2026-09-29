@@ -2,7 +2,8 @@ import { parse } from "csv-parse/sync";
 import ExcelJS from "exceljs";
 import SSF from "ssf";
 
-export const MAX_IMPORT_BYTES = 10_000_000;
+export const MAX_IMPORT_BYTES = 25_000_000;
+export const MAX_IMPORT_REQUEST_BYTES = 36_000_000;
 export const MAX_IMPORT_CONTACTS = 10_000;
 export const MAX_IMPORT_COLUMNS = 200;
 const MAX_CSV_PHYSICAL_LINES = 100_000;
@@ -10,7 +11,7 @@ const MAX_CELL_SIZE = 200_000;
 
 function requireFileSize(size) {
   if (size > MAX_IMPORT_BYTES)
-    throw new Error("Файл должен быть не больше 10 МБ");
+    throw new Error("Файл должен быть не больше 25 МБ");
 }
 
 function csvDelimiter(text) {

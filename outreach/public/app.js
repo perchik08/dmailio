@@ -626,7 +626,7 @@ function renderCampaign() {
   );
   const box = document.querySelector("#campaign-content");
   if (activeTab === "leads") {
-    box.innerHTML = `<div class="panel"><h2>Импорт контактов</h2><p class="hint">Загрузите CSV или Excel (.xlsx) до 10 МБ. Сопоставьте колонки с полями и переменными писем. Проверяется формат email и повторы в этой таблице и других кампаниях; существующая цепочка меняется только по вашему выбору. <a href="/api/template.csv">Скачать CSV-шаблон</a></p>${editable && !importSession ? '<label>Выберите таблицу<input id="import-file" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>' : ""}<div id="import-wizard">${editable && importSession ? renderImportWizard(importSession) : ""}</div></div><div class="panel" id="lead-browser"></div>`;
+    box.innerHTML = `<div class="panel"><h2>Импорт контактов</h2><p class="hint">Загрузите CSV или Excel (.xlsx) до 25 МБ. Сопоставьте колонки с полями и переменными писем. Проверяется формат email и повторы в этой таблице и других кампаниях; существующая цепочка меняется только по вашему выбору. <a href="/api/template.csv">Скачать CSV-шаблон</a></p>${editable && !importSession ? '<label>Выберите таблицу<input id="import-file" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>' : ""}<div id="import-wizard">${editable && importSession ? renderImportWizard(importSession) : ""}</div></div><div class="panel" id="lead-browser"></div>`;
     mountLeads(box.querySelector("#lead-browser"), current, api, notice);
     document.querySelector("#import-file")?.addEventListener(
       "change",

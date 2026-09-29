@@ -46,9 +46,12 @@ test("table reader keeps CSV columns by position and source row numbers", async 
   assert.equal(table.rows[0].values[1], "первая строка\nпродолжение");
 });
 
-test("table reader enforces the 10 MB and 10,000-contact CSV limits", async () => {
-  const { parseCsvTable } = await reader();
-  assert.throws(() => parseCsvTable("x".repeat(10_000_001)), /10 МБ/);
+test("table reader enforces the 25 MB and 10,000-contact CSV limits", async () => {
+  const { MAX_IMPORT_BYTES, MAX_IMPORT_REQUEST_BYTES, parseCsvTable } =
+    await reader();
+  assert.equal(MAX_IMPORT_BYTES, 25_000_000);
+  assert.ok(MAX_IMPORT_REQUEST_BYTES >= Math.ceil((MAX_IMPORT_BYTES * 4) / 3));
+  assert.throws(() => parseCsvTable("x".repeat(25_000_001)), /25 МБ/);
 
   const oversizedRows =
     "Email\n" +

@@ -31,8 +31,8 @@ export function validateImportFile(file) {
     );
   if (!["csv", "xlsx"].includes(extension))
     throw new Error("Поддерживаются файлы CSV и .xlsx");
-  if (file.size > 10_000_000)
-    throw new Error("Максимальный размер файла — 10 МБ");
+  if (file.size > 25_000_000)
+    throw new Error("Максимальный размер файла — 25 МБ");
   return { format: extension };
 }
 

@@ -9,6 +9,7 @@ import { Worker } from "./worker.mjs";
 import { checkDomainDNS } from "./dns.mjs";
 import { parseContacts, requireValue, render } from "./core.mjs";
 import {
+  MAX_IMPORT_REQUEST_BYTES,
   listXlsxSheets,
   parseCsvTable,
   parseXlsxSheet,
@@ -105,7 +106,9 @@ export function createApp({
         const importRoute =
           path === "/api/import/preview" ||
           /\/api\/campaigns\/[^/]+\/import$/.test(path);
-        const maxRequestBytes = importRoute ? 14_000_000 : 11_000_000;
+        const maxRequestBytes = importRoute
+          ? MAX_IMPORT_REQUEST_BYTES
+          : 11_000_000;
         const chunks = [];
         for await (const chunk of req) {
           size += chunk.length;
@@ -454,7 +457,7 @@ async function readImportTable(data) {
   if (format === "xlsx") {
     requireValue(
       typeof data.content === "string" &&
-        data.content.length <= 14_000_000 &&
+        data.content.length <= 34_000_000 &&
         /^[A-Za-z0-9+/]*={0,2}$/.test(data.content),
       "Файл Excel прочитать не удалось",
     );

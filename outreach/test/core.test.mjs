@@ -41,6 +41,9 @@ test("ambiguous CSV headers and missing email are rejected", () => {
   );
   assert.throws(() => core.parseContacts("name\nИван"), /email/);
 });
+test("legacy CSV import accepts the expanded 25 MB file limit", () => {
+  assert.throws(() => core.parseContacts("x".repeat(25_000_001)), /25 МБ/);
+});
 test("variables are literal, nested sender fields work, missing and cycles fail", () => {
   assert.equal(typeof core.render, "function");
   assert.equal(

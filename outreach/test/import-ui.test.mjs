@@ -19,8 +19,8 @@ test("import UI exposes supported field targets and validates file type and size
     /\.xls.*\.xlsx/i,
   );
   assert.throws(
-    () => ui.validateImportFile({ name: "leads.csv", size: 10_000_001 }),
-    /10 МБ/,
+    () => ui.validateImportFile({ name: "leads.csv", size: 25_000_001 }),
+    /25 МБ/,
   );
 });
 
