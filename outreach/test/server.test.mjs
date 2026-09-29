@@ -78,9 +78,13 @@ test("API requires login, same-origin writes and excludes credentials", async ()
   try {
     const script = await fetch(base + "/quill.js");
     const stylesheet = await fetch(base + "/quill.snow.css");
+    const sequence = await fetch(base + "/sequence.js");
     assert.equal(script.status, 200);
     assert.equal(stylesheet.status, 200);
     assert.match(script.headers.get("content-type"), /javascript/);
+    assert.equal(sequence.status, 200);
+    assert.match(sequence.headers.get("content-type"), /javascript/);
+    assert.match(await sequence.text(), /renderSequenceSidebar/);
     assert.equal((await fetch(base + "/importer.js")).status, 200);
     assert.match(stylesheet.headers.get("content-type"), /css/);
     for (const family of ["onest", "inter"]) {

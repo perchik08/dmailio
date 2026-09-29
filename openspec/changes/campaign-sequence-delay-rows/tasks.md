@@ -5,3 +5,4 @@
 - [x] Wire row inputs to the corresponding follow-up step and retain the 0–365 day bounds.
 - [x] Run the focused test, the full outreach test suite, and formatting checks.
 - [x] Review the final diff against this change's requirements.
+- [x] Include newly added browser modules in the static asset route and verify their public HTTP response.

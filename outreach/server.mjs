@@ -412,6 +412,7 @@ export function createApp({
           "/editor.js",
           "/leads.js",
           "/importer.js",
+          "/sequence.js",
           "/style.css",
         ].includes(path)
       ) {
