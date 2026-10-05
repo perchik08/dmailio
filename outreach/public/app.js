@@ -1,4 +1,5 @@
 import { mountEditor } from "/editor.js";
+import { mountFullInbox } from "/full-inbox.js";
 import { mountLeads } from "/leads.js";
 import { renderSequenceSidebar, updateSequenceDelay } from "/sequence.js";
 import {
@@ -1315,6 +1316,18 @@ function mailboxDialog(
   });
 }
 async function inbox() {
+  shell('<div id="full-mail-root"></div>');
+  await mountFullInbox({
+    api,
+    root: document.querySelector("#full-mail-root"),
+    mailboxes: state.mailboxes,
+    campaigns: state.campaigns,
+    escape,
+    date,
+    notice,
+  });
+}
+async function campaignInbox() {
   const threads = await api("/inbox?campaign=" + inboxCampaign);
   shell(
     `<div class="top"><div><h1>Инбокс</h1><p class="hint">Ответы на ваши кампании и история переписки</p></div>${campaignFilter("inbox-filter", inboxCampaign)}</div><div class="inbox"><aside>${threads.length ? threads.map((t) => `<button class="thread-button" data-thread="${t.id}"><strong>${escape(t.email)}</strong><small>${escape(t.campaign)}</small><small>${date(t.updated)} · ${escape(labels[t.label])}</small></button>`).join("") : '<div class="panel"><h2>Ответов пока нет</h2><p class="hint">Связанные с кампаниями ответы появятся после синхронизации почт.</p></div>'}</aside><div id="thread"><div class="empty"><h2>Выберите диалог</h2></div></div></div>`,

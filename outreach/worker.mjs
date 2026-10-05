@@ -51,7 +51,7 @@ export class Worker {
         try {
           const cursor = await this.gateway.sync(
             this.store.mailbox(m.id, true),
-            (incoming) => this.store.ingest(m.id, incoming),
+            (incoming) => this.store.ingestAll(m.id, incoming),
           );
           this.store.synced(m.id, cursor);
           try {
