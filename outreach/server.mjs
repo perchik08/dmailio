@@ -15,6 +15,7 @@ import {
   parseXlsxSheet,
 } from "./import-table.mjs";
 import { previewImport, suggestColumnMappings } from "./import.mjs";
+import { handleFullInbox } from "./full-inbox-api.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
@@ -108,7 +109,9 @@ export function createApp({
           /\/api\/campaigns\/[^/]+\/import$/.test(path);
         const maxRequestBytes = importRoute
           ? MAX_IMPORT_REQUEST_BYTES
-          : 11_000_000;
+          : path.startsWith("/api/mailbox/")
+            ? 12_500_000
+            : 11_000_000;
         const chunks = [];
         for await (const chunk of req) {
           size += chunk.length;
@@ -168,6 +171,20 @@ export function createApp({
           campaigns: store.campaigns(),
           workerError: worker.lastError || "",
         });
+      if (
+        await handleFullInbox({
+          path,
+          method,
+          url,
+          data,
+          send,
+          res,
+          store,
+          gateway,
+          worker,
+        })
+      )
+        return;
       if (path === "/api/mailboxes" && method === "GET")
         return send(store.mailboxOverview());
       if (path === "/api/mailboxes" && method === "POST")
@@ -246,7 +263,7 @@ export function createApp({
           const cursor = await gateway.verify(store.mailbox(mailbox[1], true));
           store.markMailbox(mailbox[1], true);
           const m = store.mailbox(mailbox[1], true);
-          if (!m.cursor.validity) store.synced(m.id, cursor);
+          if (!m.cursor.validity && !m.cursor.since) store.synced(m.id, cursor);
           return send(store.mailbox(mailbox[1]));
         } catch {
           store.markMailbox(
@@ -416,6 +433,8 @@ export function createApp({
           "/leads.js",
           "/importer.js",
           "/sequence.js",
+          "/full-inbox.js",
+          "/full-inbox.css",
           "/style.css",
         ].includes(path)
       ) {

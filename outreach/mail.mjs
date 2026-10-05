@@ -3,6 +3,12 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { escapeHTML } from "./core.mjs";
 import { renderContent } from "./content.mjs";
+import {
+  initializeFullInbox,
+  syncFullInbox,
+  updateFullMessage,
+  sendFullMessage,
+} from "./full-inbox-sync.mjs";
 
 export function classify(parsed) {
   const ct = String(
@@ -72,6 +78,7 @@ export class MailGateway {
     const imap = this.imap(m);
     try {
       await imap.connect();
+      if (m.id) return await initializeFullInbox(imap);
       await imap.mailboxOpen("INBOX");
       return {
         validity: String(imap.mailbox.uidValidity),
@@ -82,7 +89,11 @@ export class MailGateway {
       imap.close();
     }
   }
+  async updateFullMessage(m, locations, action) {
+    return updateFullMessage(this, m, locations, action);
+  }
   async send(m, message) {
+    if (message.kind === "mail") return sendFullMessage(this, m, message);
     const unsubscribe = `${this.publicURL}/unsubscribe/${message.token}`;
     const formatted = renderContent(
       message,
@@ -148,6 +159,7 @@ export class MailGateway {
     }
   }
   async sync(m, onMessage) {
+    if (m.id) return syncFullInbox(this, m, onMessage);
     const c = this.imap(m);
     try {
       await c.connect();
