@@ -4,6 +4,7 @@ import {
   pagination,
   identifier,
 } from "./contracts.mjs";
+import { compileSource } from "./render.mjs";
 export function letterInput(value) {
   const editorMode = value.editorMode || "html";
   if (!["html", "markdown"].includes(editorMode))
@@ -29,6 +30,7 @@ export function letterInput(value) {
     editorMode,
     source,
     sources,
+    renderedHtml: compileSource(source, editorMode),
     archived: value.archived === true,
   };
 }

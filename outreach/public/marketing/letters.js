@@ -9,7 +9,9 @@ import {
   date,
   navigate,
 } from "./common.js";
+import { mountPreview } from "./editor-preview.js";
 export async function letters(root, params, refresh) {
+  root.disposeLetter?.();
   const result = await api(`/letters?${params}`);
   root.innerHTML =
     heading(
@@ -86,6 +88,8 @@ export async function letters(root, params, refresh) {
   });
 }
 export async function letterEditor(root, id) {
+  root.disposeLetter?.();
+  let closed = false;
   let letter = await api(`/letters/${id}`),
     revision = 0,
     savedRevision = 0,
@@ -135,7 +139,7 @@ export async function letterEditor(root, id) {
   };
   const save = async () => {
     clearTimeout(timer);
-    if (!root.isConnected || conflict) return;
+    if (closed || !root.isConnected || conflict) return;
     if (inflight) {
       await inflight;
       if (savedRevision !== revision) return save();
@@ -165,7 +169,7 @@ export async function letterEditor(root, id) {
       inflight = null;
     });
     await inflight;
-    if (revision !== at && !conflict && root.isConnected)
+    if (revision !== at && !conflict && !closed && root.isConnected)
       timer = setTimeout(() => save(), 900);
   };
   root
@@ -245,5 +249,12 @@ export async function letterEditor(root, id) {
     }
   } catch {}
   root.getLetter = capture;
-  return { capture, source, save };
+  const editor = { capture, source, save };
+  const disposePreview = mountPreview(root, id, editor);
+  root.disposeLetter = () => {
+    closed = true;
+    clearTimeout(timer);
+    disposePreview();
+  };
+  return editor;
 }

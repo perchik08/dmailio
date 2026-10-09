@@ -64,6 +64,30 @@ export function createApp({
       const path = url.pathname;
       const method = req.method;
       if (path === "/healthz") return send({ ok: true });
+      const marketingImage = path.match(/^\/marketing-media\/([a-f\d]{64})$/);
+      if (marketingImage && method === "GET") {
+        if (!marketing.assets)
+          return send(
+            errorBody(
+              new MarketingError(
+                "MARKETING_UNAVAILABLE",
+                "Картинки временно недоступны",
+                503,
+              ),
+            ),
+            503,
+          );
+        try {
+          const asset = await marketing.assets.get(marketingImage[1]);
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          return send(asset.data, 200, asset.mime);
+        } catch (error) {
+          return send(
+            errorBody(error),
+            error instanceof MarketingError ? error.status : 503,
+          );
+        }
+      }
       const link = path.match(/^\/click\/([a-f0-9]{48})$/);
       if (link && method === "GET") {
         const target = store.followLink(link[1]);
@@ -192,7 +216,17 @@ export function createApp({
           campaigns: store.campaigns(),
           workerError: worker.lastError || "",
         });
-      if (await marketing.handle({ path, method, url, data, send, res }))
+      if (
+        await marketing.handle({
+          path,
+          method,
+          url,
+          data,
+          send,
+          res,
+          publicURL,
+        })
+      )
         return;
       if (
         await handleFullInbox({
@@ -466,6 +500,7 @@ export function createApp({
           "/marketing/marketing.css",
           "/marketing/import.js",
           "/marketing/letters.js",
+          "/marketing/editor-preview.js",
         ].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);

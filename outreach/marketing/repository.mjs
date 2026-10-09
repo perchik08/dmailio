@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS marketing.recipients (id uuid PRIMARY KEY, run_id uui
 CREATE TABLE IF NOT EXISTS marketing.events (id uuid PRIMARY KEY, recipient_id uuid NOT NULL REFERENCES marketing.recipients(id), provider_event_id text UNIQUE, kind text NOT NULL, data jsonb NOT NULL, occurred_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS marketing.import_jobs (id text PRIMARY KEY, fingerprint text NOT NULL, payload jsonb NOT NULL, report jsonb NOT NULL DEFAULT '[]', cursor int NOT NULL DEFAULT 0, state text NOT NULL DEFAULT 'pending', error text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
 INSERT INTO marketing.schema_migrations(version) VALUES(2) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS marketing.assets (id text PRIMARY KEY, mime text NOT NULL, name text NOT NULL, alt text NOT NULL DEFAULT '', size int NOT NULL, data bytea NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+INSERT INTO marketing.schema_migrations(version) VALUES(3) ON CONFLICT DO NOTHING;
 INSERT INTO marketing.schema_migrations(version) VALUES(1) ON CONFLICT DO NOTHING;
 `;
 function stable(value) {

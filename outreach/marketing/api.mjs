@@ -3,6 +3,9 @@ import { Contacts } from "./contacts.mjs";
 import { Lists } from "./lists.mjs";
 import { Imports, importPreview, mappedRows } from "./import.mjs";
 import { Letters } from "./letters.mjs";
+import { letterInput } from "./letters.mjs";
+import { Assets } from "./assets.mjs";
+import { renderLetter } from "./render.mjs";
 
 export class MarketingAPI {
   constructor({ repository, listmonk } = {}) {
@@ -12,9 +15,10 @@ export class MarketingAPI {
       this.lists = new Lists(listmonk, repository, this.contacts);
       this.imports = new Imports(this.contacts, this.lists, repository);
       this.letters = new Letters(repository);
+      this.assets = new Assets(repository);
     }
   }
-  async handle({ path, method, url, data, send, res }) {
+  async handle({ path, method, url, data, send, res, publicURL }) {
     if (!path.startsWith("/api/marketing/")) return false;
     try {
       if (!this.repository || !this.listmonk) throw unavailable();
@@ -26,6 +30,46 @@ export class MarketingAPI {
           cabinet: "current",
           massTransportConfigured: false,
         });
+      } else if (path === "/api/marketing/assets" && method === "GET")
+        send(await this.assets.page());
+      else if (path === "/api/marketing/assets" && method === "POST")
+        send(await this.assets.upload(data), 201);
+      else if (path === "/api/marketing/assets/remote" && method === "POST")
+        send(await this.assets.remote(data), 201);
+      else if (
+        /^\/api\/marketing\/letters\/[^/]+\/(preview|export)$/.test(path) &&
+        method === "POST"
+      ) {
+        const [, id, action] = path.slice("/api/marketing/".length).split("/");
+        const letter = letterInput({
+          ...(await this.letters.get(id)),
+          ...data,
+        });
+        const contact = data.contactId
+          ? await this.contacts.get(data.contactId)
+          : {
+              email: "preview@example.invalid",
+              name: "Анна",
+              fields: {
+                firstName: "Анна",
+                lastName: "Пример",
+                company: "Пример компании",
+              },
+            };
+        const rendered = renderLetter({
+          ...letter,
+          contact,
+          rotationSeed: String(data.rotationSeed || "preview").slice(0, 200),
+          context: { type: "preview", publicURL },
+        });
+        if (action === "preview") send(rendered);
+        else {
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="letter-${id}.html"`,
+          );
+          send(rendered.html, 200, "text/html; charset=utf-8");
+        }
       } else if (path === "/api/marketing/letters" && method === "GET") {
         send(await this.letters.page(url.searchParams));
       } else if (path === "/api/marketing/letters" && method === "POST") {
