@@ -16,7 +16,7 @@ export default function ColumnsContainerEditor({ style, props }: ColumnsContaine
   const { columns, ...restProps } = props ?? {};
   const columnsValue = columns ?? EMPTY_COLUMNS;
 
-  const updateColumn = (columnIndex: 0 | 1 | 2, { block, blockId, childrenIds }: EditorChildrenChange) => {
+  const updateColumn = (columnIndex: number, { block, blockId, childrenIds }: EditorChildrenChange) => {
     const nColumns = [...columnsValue];
     nColumns[columnIndex] = { childrenIds };
     setDocument({
@@ -36,14 +36,8 @@ export default function ColumnsContainerEditor({ style, props }: ColumnsContaine
   };
 
   return (
-    <BaseColumnsContainer
-      props={restProps}
-      style={style}
-      columns={[
-        <EditorChildrenIds childrenIds={columns?.[0]?.childrenIds} onChange={(change) => updateColumn(0, change)} />,
-        <EditorChildrenIds childrenIds={columns?.[1]?.childrenIds} onChange={(change) => updateColumn(1, change)} />,
-        <EditorChildrenIds childrenIds={columns?.[2]?.childrenIds} onChange={(change) => updateColumn(2, change)} />,
-      ]}
-    />
+    <div className={restProps.mobileReverse ? 'mk-builder-columns reverse' : 'mk-builder-columns'} style={{display:'flex',gap:8}}>
+      {columnsValue.map((column,index)=><div key={index} data-builder-parent={currentBlockId} data-builder-column={index} style={{flex:restProps.ratios?.[index]||1,minWidth:0,border:'1px dashed #cbd5e1'}}><EditorChildrenIds columnIndex={index} childrenIds={column.childrenIds} onChange={change=>updateColumn(index,change)}/></div>)}
+    </div>
   );
 }

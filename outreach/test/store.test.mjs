@@ -110,6 +110,135 @@ function setup() {
   s.setCampaignStatus(c.id, "active");
   return { s, m, c };
 }
+
+test("rotation preview and reserved rich-signature emails share one selected body", () => {
+  const { s, m, c } = setup();
+  try {
+    s.saveSignature(m.id, {
+      body: "**Подпись**",
+      format: "markdown",
+      enabled: true,
+    });
+    const campaign = s.campaign(c.id);
+    campaign.steps[0].body = "{Первый|Второй} {{Подпись Отправителя}}";
+    const lead = campaign.leads[0];
+    for (let i = 0; i < 20; i++) {
+      const preview = s.compose(campaign, lead, s.mailbox(m.id), 0);
+      const word = preview.text.split(" ")[0];
+      assert.match(preview.text, /^(Первый|Второй) \*\*Подпись\*\*$/);
+      assert.ok(preview.body.startsWith(word + " "));
+      assert.ok(preview.plainText.startsWith(word));
+      assert.equal((preview.plainText.match(/Подпись/g) || []).length, 1);
+    }
+  } finally {
+    s.close();
+  }
+});
+
+test("rotation is frozen in reserved messages and preserved by recovery", () => {
+  const { s, m, c } = setup();
+  const now = new Date("2026-09-21T12:00:00Z").getTime();
+  try {
+    const campaign = s.campaign(c.id);
+    campaign.steps[0].body = "{{name}}, {привет|здравствуйте}!";
+    s.db
+      .prepare("UPDATE campaigns SET config=? WHERE id=?")
+      .run(JSON.stringify({ ...campaign, status: undefined }), c.id);
+    const message = s.reserve(now, new Set([m.id]));
+    assert.match(message.body, /^Иван, (привет|здравствуйте)!$/);
+    s.recover(now + 600000);
+    assert.equal(s.message(message.id).body, message.body);
+    assert.equal(s.reserve(now + 600000, new Set([m.id])), null);
+  } finally {
+    s.close();
+  }
+});
+
+test("campaign activation rejects errors in any rotation branch on any step", () => {
+  const { s, m, c } = setup();
+  try {
+    s.setCampaignStatus(c.id, "paused");
+    const campaign = s.campaign(c.id);
+    for (const invalid of [
+      "{Привет|}",
+      "{Привет|{{missing}}}",
+      "{Привет|здравствуйте",
+    ]) {
+      campaign.steps[1].body = invalid;
+      s.db
+        .prepare("UPDATE campaigns SET config=? WHERE id=?")
+        .run(JSON.stringify({ ...campaign, status: undefined }), c.id);
+      assert.throws(() => s.setCampaignStatus(c.id, "active"));
+      assert.equal(s.campaign(c.id).status, "paused");
+    }
+    campaign.steps[1].body = "{Пинг|Напоминание}";
+    campaign.steps[0].subject = "{Очень длинная тема|{{bad}}}";
+    campaign.leads[0].fields.bad = "x\ny";
+    s.db
+      .prepare("UPDATE leads SET fields=? WHERE id=?")
+      .run(JSON.stringify(campaign.leads[0].fields), campaign.leads[0].id);
+    s.db
+      .prepare("UPDATE campaigns SET config=? WHERE id=?")
+      .run(JSON.stringify({ ...campaign, status: undefined }), c.id);
+    assert.throws(() => s.setCampaignStatus(c.id, "active"), /Тема/);
+    campaign.steps[0].subject = "Тема";
+    s.db
+      .prepare("UPDATE campaigns SET config=? WHERE id=?")
+      .run(JSON.stringify({ ...campaign, status: undefined }), c.id);
+    assert.equal(s.setCampaignStatus(c.id, "active").status, "active");
+    const preview = s.preview(c.id, undefined, m.id, 1);
+    assert.match(preview.body, /^(Пинг|Напоминание)$/);
+  } finally {
+    s.close();
+  }
+});
+
+test("follow-up without a subject inherits the saved rotated subject", () => {
+  const { s, m, c } = setup();
+  const now = new Date("2026-09-21T12:00:00Z").getTime();
+  try {
+    const campaign = s.campaign(c.id);
+    campaign.steps[0].subject = "{Вопрос|Предложение}";
+    campaign.steps[1].delay = 0;
+    s.db
+      .prepare("UPDATE campaigns SET config=? WHERE id=?")
+      .run(JSON.stringify({ ...campaign, status: undefined }), c.id);
+    const first = s.reserve(now, new Set([m.id]));
+    s.finish(first.id, "sent", now);
+    // Use a saved first-step subject distinct from both source alternatives.
+    s.db
+      .prepare("UPDATE messages SET subject=? WHERE id=?")
+      .run("Зафиксированная тема", first.id);
+    const followup = s.reserve(now + 120000, new Set([m.id]));
+    assert.equal(followup.subject, "Зафиксированная тема");
+  } finally {
+    s.close();
+  }
+});
+test("rotation preflight ignores disabled signatures and checks images in every branch", () => {
+  const { s, m, c } = setup();
+  try {
+    const campaign = s.campaign(c.id);
+    const mailbox = {
+      ...s.mailbox(m.id),
+      signature: "{{missing}}",
+      signatureFormat: "markdown",
+      signatureEnabled: false,
+    };
+    campaign.steps[0].includeSignature = false;
+    assert.doesNotThrow(() =>
+      s.compose(campaign, campaign.leads[0], mailbox, 0, true),
+    );
+    campaign.steps[0].format = "markdown";
+    campaign.steps[0].body = `{${"x".repeat(100)}|<img src="/api/images/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">}`;
+    assert.throws(
+      () => s.compose(campaign, campaign.leads[0], mailbox, 0, true),
+      /Картинка/,
+    );
+  } finally {
+    s.close();
+  }
+});
 test("new campaign drafts appear in the list immediately and can be renamed", () => {
   const s = new module.Store(":memory:", "a".repeat(64));
   const draft = s.createCampaignDraft("Подбор партнёров");

@@ -1,4 +1,6 @@
 import { mountEditor } from "/editor.js";
+import { mountFullInbox } from "/full-inbox.js";
+import { mountMarketing } from "/marketing/index.js";
 import { mountLeads } from "/leads.js";
 import { renderSequenceSidebar, updateSequenceDelay } from "/sequence.js";
 import {
@@ -185,11 +187,15 @@ document.addEventListener("pointerdown", (event) => {
   });
 });
 function shell(body) {
+  root.querySelector("#marketing-root")?.disposeLetter?.();
   root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="logo">dmailio</div><div class="subtle">Аутрич для вашей команды</div><nav>${[
     ["campaigns", "Кампании", "bullhorn"],
     ["inbox", "Инбокс", "inbox"],
     ["analytics", "Аналитика", "chart-bar"],
     ["mailboxes", "Почты", "envelope"],
+    ["marketing-contacts", "Контакты", "envelope"],
+    ["marketing-lists", "Списки рассылки", "bullhorn"],
+    ["marketing-letters", "Письма рассылок", "envelope"],
   ]
     .map(
       ([id, name, glyph]) =>
@@ -201,9 +207,20 @@ function shell(body) {
   document.querySelectorAll("[data-nav]").forEach(
     (b) =>
       (b.onclick = action(async () => {
+        if (
+          root.querySelector("#marketing-root")?.isDirtyLetter?.() &&
+          !confirm(
+            "Есть несохранённые изменения. Перейти? Черновик останется на этом устройстве.",
+          )
+        )
+          return;
         page = b.dataset.nav;
         current = null;
         mailboxDetailId = "";
+        const hash = page.startsWith("marketing-")
+          ? `#marketing/${page.slice("marketing-".length)}`
+          : "";
+        history.pushState(null, "", location.pathname + location.search + hash);
         await refresh();
       })),
   );
@@ -213,6 +230,7 @@ function shell(body) {
   });
 }
 function login() {
+  root.querySelector("#marketing-root")?.disposeLetter?.();
   root.innerHTML =
     '<form class="login"><div class="logo">dmailio</div><h1>Войти в команду</h1><p class="hint">Введите пароль администратора вашей установки.</p><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Войти</button></form>';
   root.querySelector("form").onsubmit = action(async (e) => {
@@ -223,6 +241,17 @@ function login() {
 }
 async function refresh() {
   state = await api("/state");
+  if (location.hash.startsWith("#marketing/")) {
+    current = null;
+    page = location.hash.startsWith("#marketing/letters")
+      ? "marketing-letters"
+      : location.hash.startsWith("#marketing/contacts")
+        ? "marketing-contacts"
+        : "marketing-lists";
+    shell('<section id="marketing-root"></section>');
+    return mountMarketing(root.querySelector("#marketing-root"), refresh);
+  }
+  if (page.startsWith("marketing-")) page = "campaigns";
   if (current) return renderCampaign();
   if (page === "campaigns") campaigns();
   if (page === "mailboxes") {
@@ -232,6 +261,7 @@ async function refresh() {
   if (page === "inbox") await inbox();
   if (page === "analytics") await analytics();
 }
+window.addEventListener("hashchange", action(refresh));
 function campaigns() {
   shell(
     `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${badge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
@@ -665,7 +695,7 @@ function renderCampaign() {
         "Подпись Отправителя",
       ]),
     ];
-    box.innerHTML = `<div class="steps"><aside>${renderSequenceSidebar(current.steps, stepIndex, editable, escape)}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
+    box.innerHTML = `<div class="steps"><aside>${renderSequenceSidebar(current.steps, stepIndex, editable, escape)}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Ротация фраз: {Привет|Здравствуйте} — для каждого письма выбирается один вариант. Варианты могут содержать {{Имя}}; вложенные группы не поддерживаются. Предпросмотр показывает пример, при отправке выбор делается заново и сохраняется. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
     const bodyEditor = mountEditor(document.querySelector("#body"), {
       api,
       notify: notice,
@@ -1315,6 +1345,18 @@ function mailboxDialog(
   });
 }
 async function inbox() {
+  shell('<div id="full-mail-root"></div>');
+  await mountFullInbox({
+    api,
+    root: document.querySelector("#full-mail-root"),
+    mailboxes: state.mailboxes,
+    campaigns: state.campaigns,
+    escape,
+    date,
+    notice,
+  });
+}
+async function campaignInbox() {
   const threads = await api("/inbox?campaign=" + inboxCampaign);
   shell(
     `<div class="top"><div><h1>Инбокс</h1><p class="hint">Ответы на ваши кампании и история переписки</p></div>${campaignFilter("inbox-filter", inboxCampaign)}</div><div class="inbox"><aside>${threads.length ? threads.map((t) => `<button class="thread-button" data-thread="${t.id}"><strong>${escape(t.email)}</strong><small>${escape(t.campaign)}</small><small>${date(t.updated)} · ${escape(labels[t.label])}</small></button>`).join("") : '<div class="panel"><h2>Ответов пока нет</h2><p class="hint">Связанные с кампаниями ответы появятся после синхронизации почт.</p></div>'}</aside><div id="thread"><div class="empty"><h2>Выберите диалог</h2></div></div></div>`,

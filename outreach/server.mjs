@@ -15,6 +15,11 @@ import {
   parseXlsxSheet,
 } from "./import-table.mjs";
 import { previewImport, suggestColumnMappings } from "./import.mjs";
+import { handleFullInbox } from "./full-inbox-api.mjs";
+import { MarketingAPI } from "./marketing/api.mjs";
+import { errorBody, MarketingError } from "./marketing/contracts.mjs";
+import { configuredMarketing } from "./marketing/config.mjs";
+import { CountdownCache } from "./marketing/countdown.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
@@ -27,6 +32,7 @@ export function createApp({
   gateway,
   worker,
   dnsChecker = checkDomainDNS,
+  marketing = new MarketingAPI(),
 }) {
   requireValue(
     typeof password === "string" && password.length >= 16,
@@ -35,6 +41,7 @@ export function createApp({
   const origin = new URL(publicURL).origin;
   const secure = origin.startsWith("https:");
   const sessions = new Map();
+  const countdowns = new CountdownCache();
   const attempts = new Map();
   return createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -59,6 +66,41 @@ export function createApp({
       const path = url.pathname;
       const method = req.method;
       if (path === "/healthz") return send({ ok: true });
+      if (path.startsWith("/marketing-countdown/") && method === "GET") {
+        try {
+          const image = countdowns.get(path);
+          if (!image) return send({ error: "Таймер не найден" }, 404);
+          res.setHeader("Cache-Control", "public, max-age=10");
+          return send(image, 200, "image/gif");
+        } catch (error) {
+          if (error.status === 429) res.setHeader("Retry-After", "1");
+          return send(errorBody(error), error.status || 503);
+        }
+      }
+      const marketingImage = path.match(/^\/marketing-media\/([a-f\d]{64})$/);
+      if (marketingImage && method === "GET") {
+        if (!marketing.assets)
+          return send(
+            errorBody(
+              new MarketingError(
+                "MARKETING_UNAVAILABLE",
+                "Картинки временно недоступны",
+                503,
+              ),
+            ),
+            503,
+          );
+        try {
+          const asset = await marketing.assets.get(marketingImage[1]);
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          return send(asset.data, 200, asset.mime);
+        } catch (error) {
+          return send(
+            errorBody(error),
+            error instanceof MarketingError ? error.status : 503,
+          );
+        }
+      }
       const link = path.match(/^\/click\/([a-f0-9]{48})$/);
       if (link && method === "GET") {
         const target = store.followLink(link[1]);
@@ -97,7 +139,15 @@ export function createApp({
       }
       if (!["GET", "HEAD"].includes(method) && req.headers.origin !== origin)
         return send(
-          { error: "Запрос должен исходить из интерфейса Dmailio" },
+          path.startsWith("/api/marketing/")
+            ? errorBody(
+                new MarketingError(
+                  "FORBIDDEN_ORIGIN",
+                  "Запрос должен исходить из интерфейса Dmailio",
+                  403,
+                ),
+              )
+            : { error: "Запрос должен исходить из интерфейса Dmailio" },
           403,
         );
       let data = {};
@@ -105,10 +155,14 @@ export function createApp({
         let size = 0;
         const importRoute =
           path === "/api/import/preview" ||
+          path === "/api/marketing/imports/preview" ||
+          path === "/api/marketing/imports" ||
           /\/api\/campaigns\/[^/]+\/import$/.test(path);
         const maxRequestBytes = importRoute
           ? MAX_IMPORT_REQUEST_BYTES
-          : 11_000_000;
+          : path.startsWith("/api/mailbox/")
+            ? 12_500_000
+            : 11_000_000;
         const chunks = [];
         for await (const chunk of req) {
           size += chunk.length;
@@ -153,7 +207,14 @@ export function createApp({
         /(?:^|;\s*)dmailio=([a-f0-9]{64})(?:;|$)/,
       )?.[1];
       if (path.startsWith("/api/") && !sessions.has(token))
-        return send({ error: "Войдите в Dmailio" }, 401);
+        return send(
+          path.startsWith("/api/marketing/")
+            ? errorBody(
+                new MarketingError("UNAUTHENTICATED", "Войдите в Dmailio", 401),
+              )
+            : { error: "Войдите в Dmailio" },
+          401,
+        );
       if (path === "/api/logout" && method === "POST") {
         sessions.delete(token);
         res.setHeader(
@@ -168,6 +229,32 @@ export function createApp({
           campaigns: store.campaigns(),
           workerError: worker.lastError || "",
         });
+      if (
+        await marketing.handle({
+          path,
+          method,
+          url,
+          data,
+          send,
+          res,
+          publicURL,
+        })
+      )
+        return;
+      if (
+        await handleFullInbox({
+          path,
+          method,
+          url,
+          data,
+          send,
+          res,
+          store,
+          gateway,
+          worker,
+        })
+      )
+        return;
       if (path === "/api/mailboxes" && method === "GET")
         return send(store.mailboxOverview());
       if (path === "/api/mailboxes" && method === "POST")
@@ -246,7 +333,7 @@ export function createApp({
           const cursor = await gateway.verify(store.mailbox(mailbox[1], true));
           store.markMailbox(mailbox[1], true);
           const m = store.mailbox(mailbox[1], true);
-          if (!m.cursor.validity) store.synced(m.id, cursor);
+          if (!m.cursor.validity && !m.cursor.since) store.synced(m.id, cursor);
           return send(store.mailbox(mailbox[1]));
         } catch {
           store.markMailbox(
@@ -416,10 +503,29 @@ export function createApp({
           "/leads.js",
           "/importer.js",
           "/sequence.js",
+          "/full-inbox.js",
+          "/full-inbox.css",
           "/style.css",
+          "/marketing/index.js",
+          "/marketing/common.js",
+          "/marketing/contacts.js",
+          "/marketing/lists.js",
+          "/marketing/marketing.css",
+          "/marketing/import.js",
+          "/marketing/letters.js",
+          "/marketing/editor-preview.js",
+          "/marketing/editor-builder.js",
+          "/marketing/builder.html",
+          "/marketing/builder-dist/builder.js",
+          "/marketing/builder-dist/email-builder.css",
         ].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);
+        if (path === "/marketing/builder.html")
+          res.setHeader(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'",
+          );
         return send(
           await readFile(join(here, "public", name)),
           200,
@@ -432,6 +538,16 @@ export function createApp({
       }
       return send({ error: "Не найдено" }, 404);
     } catch (e) {
+      if (!res.headersSent && req.url.startsWith("/api/marketing/")) {
+        const failure =
+          e instanceof SyntaxError
+            ? new MarketingError("INVALID_JSON", "Некорректный JSON", 400)
+            : e;
+        return send(
+          errorBody(failure),
+          failure instanceof MarketingError ? failure.status : 503,
+        );
+      }
       if (!res.headersSent)
         send(
           {
@@ -496,12 +612,14 @@ if (
   );
   const gateway = new MailGateway(store, publicURL);
   const worker = new Worker(store, gateway);
+  const marketing = await configuredMarketing();
   const app = createApp({
     store,
     gateway,
     worker,
     publicURL,
     password: process.env.DMAILIO_PASSWORD,
+    marketing,
   });
   const timer = setInterval(() => worker.tick(), 60000);
   timer.unref();
@@ -514,6 +632,7 @@ if (
       while (worker.running)
         await new Promise((resolve) => setTimeout(resolve, 100));
       store.close();
+      await marketing.close?.();
       process.exit(0);
     });
   };
