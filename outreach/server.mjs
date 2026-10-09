@@ -102,7 +102,15 @@ export function createApp({
       }
       if (!["GET", "HEAD"].includes(method) && req.headers.origin !== origin)
         return send(
-          { error: "Запрос должен исходить из интерфейса Dmailio" },
+          path.startsWith("/api/marketing/")
+            ? errorBody(
+                new MarketingError(
+                  "FORBIDDEN_ORIGIN",
+                  "Запрос должен исходить из интерфейса Dmailio",
+                  403,
+                ),
+              )
+            : { error: "Запрос должен исходить из интерфейса Dmailio" },
           403,
         );
       let data = {};
@@ -464,6 +472,16 @@ export function createApp({
       }
       return send({ error: "Не найдено" }, 404);
     } catch (e) {
+      if (!res.headersSent && req.url.startsWith("/api/marketing/")) {
+        const failure =
+          e instanceof SyntaxError
+            ? new MarketingError("INVALID_JSON", "Некорректный JSON", 400)
+            : e;
+        return send(
+          errorBody(failure),
+          failure instanceof MarketingError ? failure.status : 503,
+        );
+      }
       if (!res.headersSent)
         send(
           {

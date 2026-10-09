@@ -52,6 +52,13 @@ export class ListmonkClient {
       });
       if (!response.ok) {
         if (response.status === 404) throw failure("NOT_FOUND", 404);
+        // listmonk GetList returns 400 for an absent numeric list ID.
+        if (
+          response.status === 400 &&
+          method === "GET" &&
+          /^\/api\/lists\/[1-9]\d*$/.test(path)
+        )
+          throw failure("NOT_FOUND", 404);
         if (response.status === 409) throw failure("CONFLICT", 409);
         if (response.status === 400 || response.status === 422)
           throw failure("UPSTREAM_VALIDATION", 422);

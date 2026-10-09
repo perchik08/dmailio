@@ -115,6 +115,17 @@ test("marketing routes share login, use structured errors and never expose serve
       "retryable",
     ]);
     assert.ok(!JSON.stringify(body).includes("private-secret"));
+    for (const [requestBody, requestOrigin, expectedCode] of [
+      ["{", "http://localhost:9100", "INVALID_JSON"],
+      ["{}", "https://foreign.invalid", "FORBIDDEN_ORIGIN"],
+    ]) {
+      const denied = await fetch(base + "/api/marketing/status", {
+        method: "POST",
+        headers: { Origin: requestOrigin },
+        body: requestBody,
+      });
+      assert.equal((await denied.json()).code, expectedCode);
+    }
   } finally {
     app.closeAllConnections();
     await new Promise((resolve) => app.close(resolve));
