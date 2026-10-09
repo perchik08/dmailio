@@ -100,6 +100,7 @@ test("two overlapping lists share one subscriber; membership removal and editing
     const c = await lists.create({ name: "New membership" });
     const consented = await contacts.create({
       email: `consented-${Date.now()}@example.invalid`,
+      source: "Controlled fixture",
       listIds: [b.id],
       consentConfirmed: true,
     });
@@ -122,6 +123,7 @@ test("two overlapping lists share one subscriber; membership removal and editing
     );
     const unconsented = await contacts.create({
       email: `unconfirmed-${Date.now()}@example.invalid`,
+      source: "Controlled fixture",
       consentConfirmed: false,
     });
     await lists.members(c.id, [unconsented.id, contact.id], "add");
