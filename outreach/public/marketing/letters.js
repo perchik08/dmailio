@@ -103,7 +103,7 @@ export async function letterEditor(root, id) {
     <div class="panel mk-letter-fields">${input("title", "Название письма", letter.title, "text", 'required maxlength="200"')}${input("subject", "Тема письма", letter.subject, "text", 'maxlength="998"')}${input("preheader", "Прехедер", letter.preheader, "text", 'maxlength="500"')}
     <label>Редактор<select data-mode><option value="html" ${letter.editorMode === "html" ? "selected" : ""}>HTML</option><option value="markdown" ${letter.editorMode === "markdown" ? "selected" : ""}>Markdown</option></select></label></div>
     <p data-save-status role="status">Сохранено · версия ${letter.version}</p><div data-recovery></div><div data-conflict hidden><p role="alert">Письмо изменено в другой вкладке. Ваш ввод сохранён в этой вкладке. Сохраните копию или загрузите серверную версию.</p><button data-reload>Загрузить серверную версию</button></div>
-    <div class="mk-editor-layout"><div class="panel mk-source"><label>Исходник письма<textarea data-source spellcheck="false" maxlength="220000">${escape(letter.source)}</textarea></label></div><div data-editor-preview></div></div>`;
+    <div class="mk-editor-layout"><div class="panel mk-source"><label for="mk-letter-source">Исходник письма</label><textarea id="mk-letter-source" data-source spellcheck="false" maxlength="220000">${escape(letter.source)}</textarea></div><div data-editor-preview></div></div>`;
   const status = root.querySelector("[data-save-status]"),
     source = root.querySelector("[data-source]");
   const capture = () => {
