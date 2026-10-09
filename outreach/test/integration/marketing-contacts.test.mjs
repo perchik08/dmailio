@@ -32,6 +32,30 @@ test("two overlapping lists share one subscriber; membership removal and editing
       consentConfirmed: true,
     });
     assert.equal(contact.lists.length, 2);
+    const audience = await lists.audience([a.id, b.id]);
+    assert.equal(audience.total, 1);
+    assert.equal(audience.eligible, 1);
+    assert.equal(audience.duplicates, 1);
+    assert.equal(
+      (
+        await contacts.page(
+          new URLSearchParams({ search: contact.email, status: "active" }),
+        )
+      ).total,
+      1,
+    );
+    await contacts.update(contact.id, { enabled: false });
+    assert.equal(
+      (
+        await contacts.page(
+          new URLSearchParams({ search: contact.email, status: "disabled" }),
+        )
+      ).total,
+      1,
+    );
+    assert.equal((await lists.audience([a.id])).eligible, 0);
+    await contacts.update(contact.id, { enabled: true });
+    assert.equal((await lists.audience([a.id])).eligible, 1);
     await lists.members(a.id, [contact.id], "add");
     assert.equal(
       (await lists.memberPage(a.id, new URLSearchParams())).total,
@@ -56,6 +80,22 @@ test("two overlapping lists share one subscriber; membership removal and editing
       listIds: [b.id],
     });
     assert.equal((await contacts.get(contact.id)).status, "blocked");
+    assert.equal(
+      (
+        await contacts.page(
+          new URLSearchParams({ search: contact.email, status: "blocked" }),
+        )
+      ).total,
+      1,
+    );
+    assert.equal(
+      (
+        await contacts.page(
+          new URLSearchParams({ search: contact.email, status: "active" }),
+        )
+      ).total,
+      0,
+    );
     assert.equal((await lists.audience([b.id])).eligible, 0);
     const archived = await lists.update(b.id, { ...b, archived: true });
     assert.equal(archived.archived, true);

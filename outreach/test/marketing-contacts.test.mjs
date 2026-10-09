@@ -27,6 +27,7 @@ test("contact normalization preserves plus/dots and validates fields without an 
     contactInput({ ...contact, fields: { constructor: "attack" } }),
   );
   assert.throws(() => contactInput({ ...contact, source: "" }));
+  assert.throws(() => contactInput({ ...contact, listIds: "not-an-array" }));
 });
 test("filters build controlled expressions and exports cannot execute spreadsheet formulas", () => {
   const query = contactQuery(
