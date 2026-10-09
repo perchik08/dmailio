@@ -1,4 +1,6 @@
 import { parse } from "csv-parse/sync";
+import { randomInt } from "node:crypto";
+import { parseRotation } from "./rotation.mjs";
 
 export const defaultSchedule = {
   days: [1, 2, 3, 4, 5],
@@ -86,7 +88,13 @@ export function inferSteps(headers) {
       delay: i ? 3 : 0,
     }));
 }
-export function render(template, fields = {}, sender = {}, used = new Set()) {
+export function render(
+  template,
+  fields = {},
+  sender = {},
+  used = new Set(),
+  options = {},
+) {
   const variables = {
     ...fields,
     "Имя Отправителя": sender.name,
@@ -95,26 +103,63 @@ export function render(template, fields = {}, sender = {}, used = new Set()) {
     "Подпись Отправителя": sender.signature,
   };
   let budget = 400_000;
-  const expand = (text, stack = []) => {
+  const expand = (text, stack = [], validating = false) => {
     requireValue(
       (budget -= String(text).length) >= 0,
       "Письмо слишком большое",
     );
-    return String(text).replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, key) => {
-      requireValue(
-        stack.length < 8 && !stack.includes(key),
-        `Переменные: цикл ${key}`,
-      );
-      requireValue(
-        Object.hasOwn(variables, key) &&
-          variables[key] !== undefined &&
-          String(variables[key]).trim() !== "",
-        `Не заполнена переменная: ${key}`,
-      );
-      used.add(key);
-      return expand(variables[key], [...stack, key]);
-    });
+    const evaluate = (nodes) => {
+      const value = nodes
+        .map((node) => {
+          if (typeof node === "string") return node;
+          if (node.alternatives) {
+            if (validating) {
+              const values = node.alternatives.map((alt) =>
+                evaluate(alt).trim(),
+              );
+              requireValue(
+                values.every(Boolean),
+                "Ротация фраз: варианты должны быть непустыми",
+              );
+              return values.reduce((a, b) => (a.length >= b.length ? a : b));
+            }
+            const index = (options.choose || randomInt)(
+              node.alternatives.length,
+            );
+            requireValue(
+              Number.isInteger(index) &&
+                index >= 0 &&
+                index < node.alternatives.length,
+              "Ротация фраз: неверный выбор варианта",
+            );
+            return evaluate(node.alternatives[index]).trim();
+          }
+          const key = node.variable;
+          requireValue(
+            stack.length < 8 && !stack.includes(key),
+            `Переменные: цикл ${key}`,
+          );
+          requireValue(
+            Object.hasOwn(variables, key) &&
+              variables[key] !== undefined &&
+              String(variables[key]).trim() !== "",
+            `Не заполнена переменная: ${key}`,
+          );
+          if (!validating || options.validateOnly) used.add(key);
+          return expand(variables[key], [...stack, key], validating);
+        })
+        .join("");
+      if (validating) options.check?.(value);
+      return value;
+    };
+    const result = evaluate(parseRotation(String(text), options.html));
+    if (validating) options.check?.(result);
+    requireValue(result.length <= 200_000, "Письмо слишком большое");
+    return result;
   };
+  const validated = expand(template, [], true);
+  if (options.validateOnly) return validated;
+  budget = 400_000;
   const result = expand(template);
   requireValue(result.length <= 200_000, "Письмо слишком большое");
   return result;

@@ -701,42 +701,72 @@ export class Store {
     requireValue(l, "Загрузите контакты");
     return this.compose(c, l, this.mailbox(mailboxId || c.mailboxIds[0]), step);
   }
-  compose(c, l, m, step) {
+  compose(c, l, m, step, validateOnly = false) {
     requireValue(c.steps[step], "Шаг не найден");
     let subject = "";
     for (let n = 0; n <= step; n++)
-      if (c.steps[n].subject) subject = render(c.steps[n].subject, l.fields, m);
+      if (c.steps[n].subject)
+        subject = render(c.steps[n].subject, l.fields, m, new Set(), {
+          validateOnly,
+          check: (value) =>
+            requireValue(
+              !/[\r\n]/.test(value) && value.length <= 998,
+              "Тема после подстановки некорректна",
+            ),
+        });
     requireValue(
       !/[\r\n]/.test(subject) && subject.length <= 998,
       "Тема после подстановки некорректна",
     );
     const used = new Set();
-    const text = render(c.steps[step].body, l.fields, m, used);
-    const signature =
-      c.steps[step].includeSignature !== false &&
-      m.signatureEnabled !== false &&
-      !used.has("Подпись Отправителя")
-        ? render(m.signature || "", l.fields, m)
+    const format = contentFormat(c.steps[step].format);
+    const marker =
+      format === "plain" && m.signatureFormat === "markdown"
+        ? randomUUID()
         : "";
+    if (marker)
+      render(c.steps[step].body, l.fields, m, new Set(), {
+        validateOnly: true,
+        html: format === "markdown",
+      });
+    // Render once: replacing an inline rich signature must not reroll phrases.
+    const body = render(
+      c.steps[step].body,
+      l.fields,
+      marker ? { ...m, signature: marker } : m,
+      used,
+      {
+        validateOnly,
+        html: format === "markdown",
+        check: (value) => {
+          if (format === "markdown") this.rendered({ body: value, format });
+        },
+      },
+    );
+    const inlineSignature = marker && used.has("Подпись Отправителя");
+    const signature =
+      inlineSignature ||
+      (c.steps[step].includeSignature !== false &&
+        m.signatureEnabled !== false &&
+        !used.has("Подпись Отправителя"))
+        ? render(m.signature || "", l.fields, m, new Set(), {
+            validateOnly,
+            html: m.signatureFormat === "markdown",
+            check: (value) => {
+              if (m.signatureFormat === "markdown")
+                this.rendered({ body: value, format: "markdown" });
+            },
+          })
+        : "";
+    const text = inlineSignature ? body.replaceAll(marker, signature) : body;
     const content = {
-      body: text,
-      format: contentFormat(c.steps[step].format),
+      body,
+      format,
       signature,
       signature_format: m.signatureFormat || "plain",
     };
     // Preserve a rich signature inserted into a legacy plain-text CSV template.
-    if (
-      content.format === "plain" &&
-      m.signatureFormat === "markdown" &&
-      used.has("Подпись Отправителя")
-    ) {
-      content.signature_marker = randomUUID();
-      content.signature = render(m.signature || "", l.fields, m);
-      content.body = render(c.steps[step].body, l.fields, {
-        ...m,
-        signature: content.signature_marker,
-      });
-    }
+    if (inlineSignature) content.signature_marker = marker;
     const formatted = this.rendered(content);
     return {
       subject,
@@ -774,7 +804,8 @@ export class Store {
           "Проверьте подключения всех ящиков",
         );
         for (const l of c.leads)
-          for (let i = 0; i < c.steps.length; i++) this.compose(c, l, m, i);
+          for (let i = 0; i < c.steps.length; i++)
+            this.compose(c, l, m, i, true);
       }
     }
     this.db.prepare("UPDATE campaigns SET status=? WHERE id=?").run(status, id);
@@ -862,7 +893,10 @@ export class Store {
             step: l.step,
             kind: "campaign",
             recipient: l.email,
-            subject: p.subject,
+            subject:
+              !c.steps[l.step].subject && previous
+                ? previous.subject
+                : p.subject,
             body: p.body,
             signature_marker: p.signature_marker,
             format: p.format,
