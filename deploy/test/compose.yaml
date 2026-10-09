@@ -1,0 +1,32 @@
+name: dmailio-test
+
+services:
+  outreach:
+    build:
+      context: ../../outreach
+    restart: unless-stopped
+    env_file:
+      - /etc/dmailio-test/outreach.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 9100
+      DMAILIO_DATA: /app/data
+      DMAILIO_PUBLIC_URL: https://test.dmailio.ru
+    ports:
+      - "127.0.0.1:9101:9100"
+    volumes:
+      - outreach-data:/app/data
+    init: true
+    stop_grace_period: 90s
+    mem_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  outreach-data:
