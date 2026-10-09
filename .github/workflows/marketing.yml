@@ -25,6 +25,7 @@ jobs:
         working-directory: outreach
     env:
       MARKETING_TEST_DATABASE_URL: postgres://marketing_test:fixture-password-only@127.0.0.1:5432/marketing_test
+      LISTMONK_TEST_URL: http://127.0.0.1:19000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,6 +37,7 @@ jobs:
       - run: npm test
       - run: npm run format:check
       - run: npm run test:marketing:unit
+      - run: node test/fixtures/listmonk.mjs
       - run: npm run test:marketing:integration
       - run: npx playwright install --with-deps chromium
       - run: npm run test:marketing:e2e

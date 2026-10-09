@@ -16,6 +16,9 @@ import {
 } from "./import-table.mjs";
 import { previewImport, suggestColumnMappings } from "./import.mjs";
 import { handleFullInbox } from "./full-inbox-api.mjs";
+import { MarketingAPI } from "./marketing/api.mjs";
+import { errorBody, MarketingError } from "./marketing/contracts.mjs";
+import { configuredMarketing } from "./marketing/config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
@@ -28,6 +31,7 @@ export function createApp({
   gateway,
   worker,
   dnsChecker = checkDomainDNS,
+  marketing = new MarketingAPI(),
 }) {
   requireValue(
     typeof password === "string" && password.length >= 16,
@@ -156,7 +160,14 @@ export function createApp({
         /(?:^|;\s*)dmailio=([a-f0-9]{64})(?:;|$)/,
       )?.[1];
       if (path.startsWith("/api/") && !sessions.has(token))
-        return send({ error: "Войдите в Dmailio" }, 401);
+        return send(
+          path.startsWith("/api/marketing/")
+            ? errorBody(
+                new MarketingError("UNAUTHENTICATED", "Войдите в Dmailio", 401),
+              )
+            : { error: "Войдите в Dmailio" },
+          401,
+        );
       if (path === "/api/logout" && method === "POST") {
         sessions.delete(token);
         res.setHeader(
@@ -171,6 +182,8 @@ export function createApp({
           campaigns: store.campaigns(),
           workerError: worker.lastError || "",
         });
+      if (await marketing.handle({ path, method, url, data, send, res }))
+        return;
       if (
         await handleFullInbox({
           path,
@@ -515,12 +528,14 @@ if (
   );
   const gateway = new MailGateway(store, publicURL);
   const worker = new Worker(store, gateway);
+  const marketing = await configuredMarketing();
   const app = createApp({
     store,
     gateway,
     worker,
     publicURL,
     password: process.env.DMAILIO_PASSWORD,
+    marketing,
   });
   const timer = setInterval(() => worker.tick(), 60000);
   timer.unref();
@@ -533,6 +548,7 @@ if (
       while (worker.running)
         await new Promise((resolve) => setTimeout(resolve, 100));
       store.close();
+      await marketing.close?.();
       process.exit(0);
     });
   };
