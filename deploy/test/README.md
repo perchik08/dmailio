@@ -1,6 +1,6 @@
 # Тестовый Dmailio
 
-Адрес: **https://test.dmailio.ru**. DNS: запись A `test` → `31.77.143.213`.
+Адрес: **https://test.lk.dmailio.ru**. DNS: запись A `test.lk` → `31.77.143.213`.
 
 ## Изоляция
 

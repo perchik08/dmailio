@@ -11,7 +11,7 @@ services:
       HOST: 0.0.0.0
       PORT: 9100
       DMAILIO_DATA: /app/data
-      DMAILIO_PUBLIC_URL: https://test.dmailio.ru
+      DMAILIO_PUBLIC_URL: https://test.lk.dmailio.ru
     ports:
       - "127.0.0.1:9101:9100"
     volumes:
