@@ -18,3 +18,5 @@ node_modules
 listmonk
 dist/*
 uploads/
+outreach/test-results/
+outreach/playwright-report/
