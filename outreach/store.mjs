@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { queryLeads } from "./leads.mjs";
+import { FullInboxStore } from "./full-inbox-store.mjs";
 import { contentFormat, renderContent, validateImage } from "./content.mjs";
 import {
   randomUUID,
@@ -110,11 +111,13 @@ export class Store {
       this.db.exec(
         "ALTER TABLE leads ADD COLUMN preparation_error TEXT NOT NULL DEFAULT ''",
       );
+    this.fullInbox = new FullInboxStore(this);
   }
   close() {
     this.db.close();
   }
   transaction(fn) {
+    if (this.db.isTransaction) return fn();
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const out = fn();
@@ -1107,6 +1110,18 @@ export class Store {
         "UPDATE messages SET status='unknown',error='Процесс прервался: проверьте отправленные письма перед дальнейшими действиями' WHERE status='sending' AND created<?",
       )
       .run(now - 600000);
+  }
+  ingestAll(mid, inbound, now = Date.now()) {
+    if (!Number.isSafeInteger(inbound.uid) || inbound.uid <= 0)
+      return this.ingest(mid, inbound, now);
+    return this.transaction(() => {
+      const captured = this.fullInbox.capture(mid, inbound, now);
+      if (captured.fresh) {
+        const related = this.ingest(mid, inbound, now);
+        if (related) this.fullInbox.annotate(captured.id, related);
+      }
+      return captured;
+    });
   }
   ingest(mid, inbound, now = Date.now()) {
     return this.transaction(() => {
