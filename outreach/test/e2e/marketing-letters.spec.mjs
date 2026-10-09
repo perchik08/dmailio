@@ -1,4 +1,52 @@
 import { test, expect } from "@playwright/test";
+test("saved textarea label is stable and failed saving keeps local input", async ({
+  page,
+}) => {
+  const id = "00000000-0000-4000-8000-000000000001";
+  await page.route(`**/api/marketing/letters/${id}`, async (route) => {
+    if (route.request().method() === "GET")
+      await route.fulfill({
+        json: {
+          id,
+          title: "Saved fixture",
+          subject: "Subject",
+          preheader: "",
+          editorMode: "html",
+          source: "<p>Saved</p>",
+          sources: { html: "<p>Saved</p>", markdown: "" },
+          version: 2,
+        },
+      });
+    else
+      await route.fulfill({
+        status: 503,
+        json: {
+          code: "MARKETING_UNAVAILABLE",
+          message: "Test connection failure",
+        },
+      });
+  });
+  await page.goto("/");
+  await page.getByLabel("Пароль").fill("fixture-password-only");
+  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.goto(`/#marketing/letters/${id}`);
+  await expect(page.getByLabel("Исходник письма", { exact: true })).toHaveValue(
+    "<p>Saved</p>",
+  );
+  await page
+    .getByLabel("Исходник письма", { exact: true })
+    .fill("<p>Local edit</p>");
+  await expect(page.locator("[data-save-status]")).toContainText(
+    "Не сохранено:",
+  );
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Восстановить локальный ввод", exact: true })
+    .click();
+  await expect(page.getByLabel("Исходник письма", { exact: true })).toHaveValue(
+    "<p>Local edit</p>",
+  );
+});
 test("letter autosave/reload preserves source; stale second tab offers copy without losing input", async ({
   page,
   context,
