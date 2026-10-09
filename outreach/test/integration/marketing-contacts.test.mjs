@@ -97,6 +97,42 @@ test("two overlapping lists share one subscriber; membership removal and editing
       0,
     );
     assert.equal((await lists.audience([b.id])).eligible, 0);
+    const c = await lists.create({ name: "New membership" });
+    const consented = await contacts.create({
+      email: `consented-${Date.now()}@example.invalid`,
+      listIds: [b.id],
+      consentConfirmed: true,
+    });
+    await lists.members(c.id, [consented.id], "add");
+    assert.equal((await lists.audience([c.id])).eligible, 1);
+    const externalContact = await repository.externalId(
+      "contact",
+      consented.id,
+    );
+    const externalList = await repository.externalId("list", c.id);
+    await pool.query(
+      "UPDATE subscriber_lists SET status='unsubscribed' WHERE subscriber_id=$1 AND list_id=$2",
+      [externalContact, externalList],
+    );
+    await lists.members(c.id, [consented.id], "add");
+    assert.equal(
+      (await contacts.get(consented.id)).lists.find((list) => list.id === c.id)
+        .status,
+      "unsubscribed",
+    );
+    const unconsented = await contacts.create({
+      email: `unconfirmed-${Date.now()}@example.invalid`,
+      consentConfirmed: false,
+    });
+    await lists.members(c.id, [unconsented.id, contact.id], "add");
+    assert.equal(
+      (await contacts.get(unconsented.id)).lists.find(
+        (list) => list.id === c.id,
+      ).status,
+      "unconfirmed",
+    );
+    assert.equal((await contacts.get(contact.id)).status, "blocked");
+    assert.equal((await lists.audience([c.id])).eligible, 0);
     const archived = await lists.update(b.id, { ...b, archived: true });
     assert.equal(archived.archived, true);
     assert.equal(

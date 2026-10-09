@@ -187,6 +187,7 @@ document.addEventListener("pointerdown", (event) => {
   });
 });
 function shell(body) {
+  root.querySelector("#marketing-root")?.disposeLetter?.();
   root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="logo">dmailio</div><div class="subtle">Аутрич для вашей команды</div><nav>${[
     ["campaigns", "Кампании", "bullhorn"],
     ["inbox", "Инбокс", "inbox"],
@@ -206,6 +207,13 @@ function shell(body) {
   document.querySelectorAll("[data-nav]").forEach(
     (b) =>
       (b.onclick = action(async () => {
+        if (
+          root.querySelector("#marketing-root")?.isDirtyLetter?.() &&
+          !confirm(
+            "Есть несохранённые изменения. Перейти? Черновик останется на этом устройстве.",
+          )
+        )
+          return;
         page = b.dataset.nav;
         current = null;
         mailboxDetailId = "";
@@ -222,6 +230,7 @@ function shell(body) {
   });
 }
 function login() {
+  root.querySelector("#marketing-root")?.disposeLetter?.();
   root.innerHTML =
     '<form class="login"><div class="logo">dmailio</div><h1>Войти в команду</h1><p class="hint">Введите пароль администратора вашей установки.</p><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Войти</button></form>';
   root.querySelector("form").onsubmit = action(async (e) => {

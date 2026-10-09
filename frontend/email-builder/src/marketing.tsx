@@ -46,7 +46,9 @@ function Builder() {
     selected = useSelectedBlockId();
   const [tab, setTab] = useState("content"),
     [mobile, setMobile] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [target, setTarget] = useState("root:0"),
+    [position, setPosition] = useState(9999);
   const history = useRef<string[]>([]),
     cursor = useRef(-1),
     replaying = useRef(false);
@@ -100,7 +102,24 @@ function Builder() {
     resetDocument(next);
     if (selected && next[selected]) setSelectedBlockId(selected);
   }
-  function add(type: string, count?: number) {
+  function destination(next: any, value = target) {
+    const [parent, column] = value.split(":");
+    return refs(next[parent] || {})[Number(column)] || next.root.data.childrenIds;
+  }
+  function move(value = target, at = position) {
+    if (!selected || selected === "root") return;
+    const next = clone(doc), [parent] = value.split(":");
+    const descendants = new Set<string>();
+    function visit(id: string) {descendants.add(id); for (const ids of refs(next[id])) for (const child of ids) visit(child);}
+    visit(selected);
+    if (descendants.has(parent)) {setError("Нельзя поместить блок внутрь самого себя"); return;}
+    const old = locate(next, selected), ids = destination(next, value);
+    if (!old) return;
+    old.splice(old.indexOf(selected), 1);
+    ids.splice(Math.min(at, ids.length), 0, selected);
+    commit(next); setError("");
+  }
+  function add(type: string, count?: number, value = target, at = position) {
     const next = clone(doc),
       id = crypto.randomUUID();
     let block: any;
@@ -125,7 +144,8 @@ function Builder() {
       };
     }
     next[id] = block;
-    next.root.data.childrenIds = [...(next.root.data.childrenIds || []), id];
+    const ids = destination(next, value);
+    ids.splice(Math.min(at, ids.length), 0, id);
     commit(next);
     setSelectedBlockId(id);
   }
@@ -244,6 +264,12 @@ function Builder() {
               </button>
             ))}
           </nav>
+          <label htmlFor="insertion-target">Место вставки</label>
+            <select id="insertion-target" value={target} onChange={e=>setTarget(e.target.value)}>
+              {Object.entries(doc).flatMap(([id, b]: any)=>refs(b).map((_, index)=><option key={`${id}:${index}`} value={`${id}:${index}`}>{id === "root" ? "Всё письмо" : `${b.type === "ColumnsContainer" ? "Колонка" : "Контейнер"} ${index+1} · ${id.slice(0,8)}`}</option>))}
+            </select>
+          <label>Позиция вставки (0 — начало)<input type="number" min="0" max="9999" value={position} onChange={e=>setPosition(Math.max(0, Number(e.target.value)))}/></label>
+          <button disabled={!selected || selected === "root"} onClick={()=>move()}>Переместить в выбранное место</button>
           {tab === "content" && (
             <>
               <div className="palette">
@@ -259,8 +285,7 @@ function Builder() {
                 ))}
               </div>
               <p>
-                Добавьте блок кнопкой или перетащите на письмо. Внутри колонок используйте кнопку
-                «+».
+                Выберите место вставки и добавьте блок кнопкой или перетащите его в нужную колонку. Позиция 9999 — конец.
               </p>
             </>
           )}
@@ -298,6 +323,8 @@ function Builder() {
             .map(([id, b]: any) => (
               <button
                 className="block-select"
+                draggable
+                onDragStart={e=>{setSelectedBlockId(id); e.dataTransfer.setData("text/plain", `block:${id}`);}}
                 key={id}
                 aria-pressed={selected === id}
                 onClick={() => setSelectedBlockId(id)}
@@ -313,7 +340,13 @@ function Builder() {
           onDrop={(e) => {
             e.preventDefault();
             const type = e.dataTransfer.getData("text/plain");
-            if (palette[type]) add(type);
+            const element = e.target as HTMLElement;
+            const parent = element.closest<HTMLElement>("[data-builder-parent]");
+            const value = parent ? `${parent.dataset.builderParent}:${parent.dataset.builderColumn || 0}` : "root:0";
+            const child = element.closest<HTMLElement>("[data-builder-index]");
+            const index = child && child.parentElement?.closest("[data-builder-parent]") === parent ? Number(child.dataset.builderIndex) : 9999;
+            if (palette[type]) add(type, undefined, value, index);
+            else if (type.startsWith("block:")) move(value, index);
           }}
         >
           <EditorBlock id="root" />

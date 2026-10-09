@@ -72,5 +72,12 @@ export function dialog(title, content, submit, { save = "Сохранить" } =
 export const input = (name, label, value = "", type = "text", extra = "") =>
   `<label>${escape(label)}<input name="${name}" type="${type}" value="${escape(value)}" ${extra}></label>`;
 export function navigate(section, params = new URLSearchParams()) {
+  if (
+    document.querySelector("#marketing-root")?.isDirtyLetter?.() &&
+    !confirm(
+      "Есть несохранённые изменения. Перейти? Черновик останется на этом устройстве.",
+    )
+  )
+    return;
   location.hash = `marketing/${section}${params.size ? "?" + params : ""}`;
 }

@@ -1,3 +1,35 @@
+export function applyBuilderImage(source, selected, asset, alt) {
+  const value = JSON.parse(source || empty());
+  let id = selected;
+  if (
+    !id ||
+    !["Image", "Gif", "Sticker", "Video", "Gallery"].includes(
+      value.document[id]?.type,
+    )
+  ) {
+    id = crypto.randomUUID();
+    value.document[id] = { type: "Image", data: { props: {} } };
+    value.document.root.data.childrenIds.push(id);
+  }
+  value.document[id].data.props = {
+    ...value.document[id].data.props,
+    ...(value.document[id].type === "Video" ||
+    value.document[id].type === "Gallery"
+      ? {}
+      : { url: asset.url }),
+    alt,
+  };
+  if (value.document[id].type === "Video")
+    value.document[id].data.props.thumbnail = asset.url;
+  if (value.document[id].type === "Gallery")
+    value.document[id].data.props.images = [
+      value.document[id].data.props.images,
+      asset.url,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  return JSON.stringify(value);
+}
 const empty = () =>
   JSON.stringify({
     schemaVersion: 1,
@@ -81,33 +113,12 @@ export function mountBuilder(root, editor) {
     }
   };
   editor.builderImage = (asset, alt) => {
-    const value = JSON.parse(editor.source.value || empty());
-    let id = selected;
-    if (
-      !id ||
-      !["Image", "Gif", "Sticker", "Video", "Gallery"].includes(
-        value.document[id]?.type,
-      )
-    ) {
-      id = crypto.randomUUID();
-      value.document[id] = { type: "Image", data: { props: {} } };
-      value.document.root.data.childrenIds.push(id);
-    }
-    value.document[id].data.props = {
-      ...value.document[id].data.props,
-      url: asset.url,
+    editor.source.value = applyBuilderImage(
+      editor.source.value,
+      selected,
+      asset,
       alt,
-    };
-    if (value.document[id].type === "Video")
-      value.document[id].data.props.thumbnail = asset.url;
-    if (value.document[id].type === "Gallery")
-      value.document[id].data.props.images = [
-        value.document[id].data.props.images,
-        asset.url,
-      ]
-        .filter(Boolean)
-        .join("\n");
-    editor.source.value = JSON.stringify(value);
+    );
     editor.source.dispatchEvent(new Event("input", { bubbles: true }));
   };
   editor.builderVariable = (token) => {

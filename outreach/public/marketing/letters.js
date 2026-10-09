@@ -97,7 +97,21 @@ export async function letterEditor(root, id) {
     timer = null,
     inflight = null,
     conflict = false;
-  const key = `dmailio-letter-${id}`;
+  let tabId = sessionStorage.getItem("dmailio-editor-tab");
+  if (!tabId) {
+    tabId = crypto.randomUUID();
+    sessionStorage.setItem("dmailio-editor-tab", tabId);
+  }
+  const prefix = `dmailio-letter-${id}-`,
+    key = prefix + tabId;
+  const dirty = () =>
+    savedRevision !== revision || Boolean(inflight) || conflict;
+  const leaving = (event) => {
+    if (!dirty()) return;
+    remember();
+    event.preventDefault();
+    event.returnValue = "";
+  };
   root.innerHTML =
     heading(
       "Редактор письма",
@@ -124,7 +138,10 @@ export async function letterEditor(root, id) {
   };
   const remember = () => {
     try {
-      sessionStorage.setItem(key, JSON.stringify(capture()));
+      localStorage.setItem(
+        key,
+        JSON.stringify({ ...capture(), draftUpdatedAt: Date.now() }),
+      );
     } catch {
       status.textContent =
         "Не удалось сохранить локальный черновик. Сохраните письмо или скачайте исходник.";
@@ -157,7 +174,7 @@ export async function letterEditor(root, id) {
         letter.version = saved.version;
         savedRevision = at;
         status.textContent = `Сохранено · версия ${letter.version}`;
-        if (revision === at) sessionStorage.removeItem(key);
+        if (revision === at) localStorage.removeItem(key);
         else remember();
       } catch (error) {
         if (closed || !source.isConnected) return;
@@ -196,7 +213,9 @@ export async function letterEditor(root, id) {
   };
   root.querySelector("[data-copy]").onclick = guard(async () => {
     const copy = await api(`/letters/${id}/copy`, capture());
-    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+    savedRevision = revision;
+    conflict = false;
     navigate(`letters/${copy.id}`);
   }, root);
   root.querySelector("[data-reload]").onclick = () =>
@@ -204,7 +223,9 @@ export async function letterEditor(root, id) {
       "Загрузить серверную версию",
       "<p>Текущий ввод будет заменён. Чтобы его сохранить, сначала нажмите «Сохранить копию».</p>",
       async () => {
-        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+        savedRevision = revision;
+        conflict = false;
         await letterEditor(root, id);
       },
       { save: "Загрузить" },
@@ -233,7 +254,19 @@ export async function letterEditor(root, id) {
     );
   }, root);
   try {
-    const stored = JSON.parse(sessionStorage.getItem(key) || "null");
+    const drafts = Object.keys(localStorage)
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => {
+        try {
+          return { key: k, value: JSON.parse(localStorage.getItem(k)) };
+        } catch {
+          return null;
+        }
+      })
+      .filter((row) => row?.value?.id === id)
+      .sort((a, b) => b.value.draftUpdatedAt - a.value.draftUpdatedAt);
+    const recovered = drafts.find((row) => row.key === key) || drafts[0];
+    const stored = recovered?.value;
     if (stored) {
       root.querySelector("[data-recovery]").innerHTML =
         "<p>Есть локальный несохранённый черновик.</p><button data-restore>Восстановить локальный ввод</button>";
@@ -248,14 +281,21 @@ export async function letterEditor(root, id) {
         source.value = letter.source;
         root.querySelector("[data-recovery]").innerHTML = "";
         mark();
+        if (recovered.key !== key) localStorage.removeItem(recovered.key);
       };
     }
   } catch {}
   root.getLetter = capture;
+  root.isDirtyLetter = dirty;
+  window.addEventListener("beforeunload", leaving);
   const editor = { capture, source, save };
   const disposePreview = mountPreview(root, id, editor);
   const disposeBuilder = mountBuilder(root, editor);
   root.disposeLetter = () => {
+    if (dirty()) remember();
+    window.removeEventListener("beforeunload", leaving);
+    delete root.isDirtyLetter;
+    delete root.disposeLetter;
     closed = true;
     clearTimeout(timer);
     disposePreview();

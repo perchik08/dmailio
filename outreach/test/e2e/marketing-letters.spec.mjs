@@ -39,6 +39,7 @@ test("saved textarea label is stable and failed saving keeps local input", async
   await expect(page.locator("[data-save-status]")).toContainText(
     "Не сохранено:",
   );
+  page.once("dialog", (dialog) => dialog.accept());
   await page.reload();
   await page
     .getByRole("button", { name: "Восстановить локальный ввод", exact: true })

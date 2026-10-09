@@ -116,7 +116,8 @@ only support IPv6 can be uploaded manually. Public URLs use DMAILIO_PUBLIC_URL.
 
 The visual editor reuses Waypoint's document/store/block components with a
 Dmailio palette and property controls. Content/Rows/Settings, 1/2/3/4/6-column
-rows with ratios/mobile order, add or drag to canvas, duplicate/move/delete,
+rows with ratios/mobile order, insert/drop at a chosen parent/column/index,
+keyboard insertion and movement between parents, duplicate/move/delete,
 undo/redo, width/colors/font/padding and image selection are wired to saved JSON.
 The frame has an opaque sandbox origin and no access to the admin session; the
 bridge checks source window, expected origin, nonce, channel and schema version.
@@ -153,3 +154,21 @@ HTML/Markdown/images: unit161/161 and real-browser/database CI
 [37982260421](https://github.com/perchik08/dmailio/actions/runs/37982260421) passed.
 Builder checks and final branch review are recorded in PR #33 before acceptance.
 These changes are not deployed to test or production by opening the draft PR.
+
+### Final review corrections (09 October 2026)
+
+A fresh-context review found six Important issues. The bounded repair pass adds:
+validated responsive stylesheets and CSS zero/decimal spacing; escaped hidden
+personalized preheaders; insert-only list memberships that respect consent and
+existing opt-outs; separate video destination/thumbnail; column-aware insertion
+and keyboard movement; durable per-tab drafts with unload warnings and editor
+cleanup on navigation. No Critical issues were reported.
+
+Local verification: 169/169 unit tests, 10/10 browser scenarios, builder build and
+both formatting gates pass. Without local PostgreSQL, backend browser scenarios
+exercise the unavailable state; dedicated builder/recovery scenarios use explicit
+fixtures. GitHub Marketing CI verifies the real PostgreSQL/listmonk paths.
+
+Scope ruling: attachments remain in the agreed backlog and are not implemented
+by this import/editor delivery. Sending, scheduling and reports (stages09+) also
+remain planned. The draft PR targets test; neither test nor production is deployed.

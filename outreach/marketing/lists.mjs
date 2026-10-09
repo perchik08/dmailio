@@ -114,11 +114,37 @@ export class Lists {
     );
     if (action === "add" && (await this.get(id)).archived)
       throw invalid("Сначала восстановите список из архива");
-    await this.client.request("PUT", "/api/subscribers/lists", {
-      ids: contactIds,
-      target_list_ids: [external],
-      action: action === "add" ? "add" : "remove",
-    });
+    if (action === "add") {
+      if (
+        ![external, ...contactIds].every(
+          (value) => Number.isSafeInteger(Number(value)) && Number(value) > 0,
+        )
+      )
+        throw invalid("Некорректный идентификатор контакта");
+      const query = `subscribers.id IN (${contactIds.map(Number).join(",")})`;
+      // Insert-only queries preserve existing subscriptions, including opt-outs.
+      await this.client.request("PUT", "/api/subscribers/query/lists", {
+        target_list_ids: [external],
+        action: "add",
+        status: "confirmed",
+        query: `${query} AND subscribers.status = 'enabled'
+          AND subscribers.attribs->'_dmailio'->>'consentConfirmed' = 'true'
+          AND COALESCE(subscribers.attribs->'_dmailio'->>'enabled','true') != 'false'
+          AND (NOT EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id=subscribers.id AND sl.status='unsubscribed')
+            OR EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id=subscribers.id AND sl.status='confirmed'))`,
+      });
+      await this.client.request("PUT", "/api/subscribers/query/lists", {
+        target_list_ids: [external],
+        action: "add",
+        status: "unconfirmed",
+        query,
+      });
+    } else
+      await this.client.request("PUT", "/api/subscribers/lists", {
+        ids: contactIds,
+        target_list_ids: [external],
+        action: "remove",
+      });
     return { affected: contactIds.length, action };
   }
   async audience(ids) {

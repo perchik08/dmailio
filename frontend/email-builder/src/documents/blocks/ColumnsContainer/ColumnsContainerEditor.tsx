@@ -37,7 +37,7 @@ export default function ColumnsContainerEditor({ style, props }: ColumnsContaine
 
   return (
     <div className={restProps.mobileReverse ? 'mk-builder-columns reverse' : 'mk-builder-columns'} style={{display:'flex',gap:8}}>
-      {columnsValue.map((column,index)=><div key={index} style={{flex:restProps.ratios?.[index]||1,minWidth:0,border:'1px dashed #cbd5e1'}}><EditorChildrenIds childrenIds={column.childrenIds} onChange={change=>updateColumn(index,change)}/></div>)}
+      {columnsValue.map((column,index)=><div key={index} data-builder-parent={currentBlockId} data-builder-column={index} style={{flex:restProps.ratios?.[index]||1,minWidth:0,border:'1px dashed #cbd5e1'}}><EditorChildrenIds columnIndex={index} childrenIds={column.childrenIds} onChange={change=>updateColumn(index,change)}/></div>)}
     </div>
   );
 }

@@ -146,6 +146,7 @@ export function render(
             `Не заполнена переменная: ${key}`,
           );
           if (!validating || options.validateOnly) used.add(key);
+          if (options.literalVariables) return String(variables[key]);
           return expand(variables[key], [...stack, key], validating);
         })
         .join("");
