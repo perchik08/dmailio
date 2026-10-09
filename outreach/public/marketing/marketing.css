@@ -5,6 +5,14 @@
   gap: 8px;
   margin: 12px 0;
 }
+.mk-import {
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+.mk-import [type="checkbox"] {
+  width: auto;
+}
 .mk-filters {
   display: flex;
   align-items: end;

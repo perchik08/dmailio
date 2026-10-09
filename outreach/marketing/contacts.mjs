@@ -215,6 +215,7 @@ export class Contacts {
       source: meta.source || "listmonk",
       enabled: meta.enabled !== false,
       consentConfirmed: meta.consentConfirmed === true,
+      importKey: meta.importKey || null,
       status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -254,7 +255,18 @@ export class Contacts {
       ),
     );
   }
-  async create(value) {
+  async findEmail(email) {
+    const query = new URLSearchParams({
+      query: `subscribers.email=${literal(normalizeEmail(email))}`,
+      per_page: "1",
+    });
+    const result = await this.client.request(
+      "GET",
+      `/api/subscribers?${query}`,
+    );
+    return result.results?.length ? this.map(result.results[0]) : null;
+  }
+  async create(value, importKey = null) {
     const data = contactInput(value);
     const lists = await Promise.all(
       data.listIds.map((id) => this.repository.externalId("list", id)),
@@ -270,6 +282,7 @@ export class Contacts {
             source: data.source,
             enabled: data.enabled,
             consentConfirmed: data.consentConfirmed,
+            importKey,
           },
         },
         status: "enabled",
@@ -293,6 +306,7 @@ export class Contacts {
           source: data.source,
           enabled: data.enabled,
           consentConfirmed: previous.consentConfirmed,
+          importKey: previous.importKey,
         },
       },
     });

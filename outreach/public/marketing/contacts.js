@@ -119,7 +119,7 @@ export async function contacts(root, params, { list, refresh }) {
       list
         ? list.description || "Контакты списка рассылки"
         : "Общая база маркетинговых контактов",
-      `${list ? "<button data-back>Все списки</button>" : ""}<button data-new class="primary">Добавить контакт</button>`,
+      `${list ? "<button data-back>Все списки</button>" : ""}<button data-import>Импорт CSV / Excel</button><button data-new class="primary">Добавить контакт</button>`,
     ) +
     `
     <form data-filters class="mk-filters panel">
@@ -177,6 +177,12 @@ export async function contacts(root, params, { list, refresh }) {
     });
   };
   on("[data-new]", "click", () => editContact(null, refresh));
+  on("[data-import]", "click", () =>
+    navigate(
+      "import",
+      list ? new URLSearchParams({ listId: list.id }) : new URLSearchParams(),
+    ),
+  );
   on("[data-back]", "click", () => navigate("lists"));
   on("[data-contact]", "click", async (event) =>
     editContact(

@@ -1,6 +1,7 @@
 import { MarketingError, errorBody, unavailable } from "./contracts.mjs";
 import { Contacts } from "./contacts.mjs";
 import { Lists } from "./lists.mjs";
+import { Imports, importPreview, mappedRows } from "./import.mjs";
 
 export class MarketingAPI {
   constructor({ repository, listmonk } = {}) {
@@ -8,6 +9,7 @@ export class MarketingAPI {
     if (repository && listmonk) {
       this.contacts = new Contacts(listmonk, repository);
       this.lists = new Lists(listmonk, repository, this.contacts);
+      this.imports = new Imports(this.contacts, this.lists, repository);
     }
   }
   async handle({ path, method, url, data, send, res }) {
@@ -22,6 +24,38 @@ export class MarketingAPI {
           cabinet: "current",
           massTransportConfigured: false,
         });
+      } else if (
+        path === "/api/marketing/imports/preview" &&
+        method === "POST"
+      ) {
+        const preview = await importPreview(data.file || data);
+        if (data.mappings && preview.table)
+          preview.validation = mappedRows(preview.table, data.mappings);
+        send(preview);
+      } else if (path === "/api/marketing/imports" && method === "POST") {
+        send(await this.imports.start(data), 202);
+      } else if (
+        /^\/api\/marketing\/imports\/[\w-]+(?:\/(?:report|resume))?$/.test(path)
+      ) {
+        const [id, action] = path
+          .slice("/api/marketing/imports/".length)
+          .split("/");
+        if (action === "report" && method === "GET") {
+          res.setHeader(
+            "Content-Disposition",
+            'attachment; filename="import-report.csv"',
+          );
+          send(await this.imports.report(id), 200, "text/csv; charset=utf-8");
+        } else if (action === "resume" && method === "POST")
+          send(await this.imports.resume(id));
+        else if (!action && method === "GET")
+          send(this.imports.result(await this.imports.get(id)));
+        else
+          throw new MarketingError(
+            "METHOD_NOT_ALLOWED",
+            "Действие не поддерживается",
+            405,
+          );
       } else if (path === "/api/marketing/contacts" && method === "GET") {
         send(await this.contacts.page(url.searchParams));
       } else if (path === "/api/marketing/contacts" && method === "POST") {

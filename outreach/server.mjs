@@ -118,6 +118,8 @@ export function createApp({
         let size = 0;
         const importRoute =
           path === "/api/import/preview" ||
+          path === "/api/marketing/imports/preview" ||
+          path === "/api/marketing/imports" ||
           /\/api\/campaigns\/[^/]+\/import$/.test(path);
         const maxRequestBytes = importRoute
           ? MAX_IMPORT_REQUEST_BYTES
@@ -462,6 +464,7 @@ export function createApp({
           "/marketing/contacts.js",
           "/marketing/lists.js",
           "/marketing/marketing.css",
+          "/marketing/import.js",
         ].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);
