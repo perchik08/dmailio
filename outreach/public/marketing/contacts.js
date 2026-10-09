@@ -205,10 +205,12 @@ export async function contacts(root, params, { list, refresh }) {
     sync();
   });
   on("[data-contact-check]", "change", (event) => {
-    if (allSelected)
+    if (allSelected) {
+      sync();
       throw new Error(
         "Сначала снимите общий выбор, затем выберите отдельные контакты",
       );
+    }
     if (event.target.checked) selected.add(event.target.dataset.contactCheck);
     else selected.delete(event.target.dataset.contactCheck);
     sync();

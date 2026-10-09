@@ -316,6 +316,11 @@ export class Contacts {
   async export(params, selectedIds, format) {
     if (!["csv", "xlsx"].includes(format))
       throw invalid("Выберите CSV или XLSX");
+    if (
+      selectedIds !== undefined &&
+      (!Array.isArray(selectedIds) || selectedIds.length > 10000)
+    )
+      throw invalid("Выберите не более 10 000 контактов");
     let rows = await this.all(params);
     if (selectedIds) {
       const selected = new Set(selectedIds.map(identifier));

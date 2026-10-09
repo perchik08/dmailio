@@ -61,3 +61,24 @@ use parameterized SQL. Optimistic updates return 409 on stale versions; equal
 operation IDs with different inputs return 409. Take PostgreSQL backups with
 `pg_dump` and restore to a separate database before switching configuration;
 preserve listmonk public schema and marketing schema in the same backup.
+
+## Contacts and lists
+
+The existing login opens Contacts and Mailing Lists through hash routes; filters
+survive a reload. Contact fields, custom variables, tags, source and marketing
+permission are editable. Subscription state and provider blocks are preserved.
+Lists support editing and reversible archival; membership removal does not delete
+the subscriber. Server-side search, status/date/custom-field filters and sorting
+are controlled expressions; arbitrary SQL from the browser is rejected.
+
+Selection supports a page or the full filtered audience (10,000 per operation).
+CSV/XLSX exports neutralize spreadsheet formula cells. List audience preview
+deduplicates contacts and checks confirmed membership, permission and blocking.
+No external address validator is required. Import mapping and delivery are later
+stages; no inactive import or send controls are presented in this stage.
+
+Windows regression156/156, formatting and browser2/2 passed on 2a838bc0.
+Linux CI [37909759367](https://github.com/perchik08/dmailio/actions/runs/37909759367)
+passed real PostgreSQL/listmonk browser CRUD, reload, field search, XLSX export,
+membership removal, regression and Docker build. Additional eligibility checks
+on eeb59ad2 verify overlapping lists, disabled/blocked contacts and status filters.
