@@ -457,6 +457,11 @@ export function createApp({
           "/full-inbox.js",
           "/full-inbox.css",
           "/style.css",
+          "/marketing/index.js",
+          "/marketing/common.js",
+          "/marketing/contacts.js",
+          "/marketing/lists.js",
+          "/marketing/marketing.css",
         ].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);

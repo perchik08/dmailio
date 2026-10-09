@@ -1,5 +1,6 @@
 import { mountEditor } from "/editor.js";
 import { mountFullInbox } from "/full-inbox.js";
+import { mountMarketing } from "/marketing/index.js";
 import { mountLeads } from "/leads.js";
 import { renderSequenceSidebar, updateSequenceDelay } from "/sequence.js";
 import {
@@ -191,6 +192,8 @@ function shell(body) {
     ["inbox", "Инбокс", "inbox"],
     ["analytics", "Аналитика", "chart-bar"],
     ["mailboxes", "Почты", "envelope"],
+    ["marketing-contacts", "Контакты", "envelope"],
+    ["marketing-lists", "Списки рассылки", "bullhorn"],
   ]
     .map(
       ([id, name, glyph]) =>
@@ -205,6 +208,10 @@ function shell(body) {
         page = b.dataset.nav;
         current = null;
         mailboxDetailId = "";
+        const hash = page.startsWith("marketing-")
+          ? `#marketing/${page.slice("marketing-".length)}`
+          : "";
+        history.pushState(null, "", location.pathname + location.search + hash);
         await refresh();
       })),
   );
@@ -224,6 +231,15 @@ function login() {
 }
 async function refresh() {
   state = await api("/state");
+  if (location.hash.startsWith("#marketing/")) {
+    current = null;
+    page = location.hash.startsWith("#marketing/contacts")
+      ? "marketing-contacts"
+      : "marketing-lists";
+    shell('<section id="marketing-root"></section>');
+    return mountMarketing(root.querySelector("#marketing-root"), refresh);
+  }
+  if (page.startsWith("marketing-")) page = "campaigns";
   if (current) return renderCampaign();
   if (page === "campaigns") campaigns();
   if (page === "mailboxes") {
@@ -233,6 +249,7 @@ async function refresh() {
   if (page === "inbox") await inbox();
   if (page === "analytics") await analytics();
 }
+window.addEventListener("hashchange", action(refresh));
 function campaigns() {
   shell(
     `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${badge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,

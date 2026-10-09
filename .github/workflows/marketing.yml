@@ -36,6 +36,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run format:check
+      - run: npm run format:check:marketing
       - run: npm run test:marketing:unit
       - run: node test/fixtures/listmonk.mjs
       - run: npm run test:marketing:integration

@@ -55,6 +55,11 @@ export function contactInput(value) {
       });
   if (value.enabled !== undefined && typeof value.enabled !== "boolean")
     throw invalid("Проверьте разрешение отправки");
+  if (
+    value.listIds !== undefined &&
+    (!Array.isArray(value.listIds) || value.listIds.length > 100)
+  )
+    throw invalid("Выберите не более 100 списков");
   return {
     email: normalizeEmail(value.email),
     name: String(value.name ?? "")
@@ -117,26 +122,36 @@ export function contactQuery(params) {
   const status = params.get("status");
   const enabled =
     "COALESCE(subscribers.attribs->'_dmailio'->>'enabled','true') <> 'false'";
+  const confirmed =
+    "EXISTS (SELECT 1 FROM subscriber_lists sl JOIN lists ml ON ml.id=sl.list_id WHERE sl.subscriber_id=subscribers.id AND sl.status='confirmed' AND ml.status='active')";
+  const active = `subscribers.status='enabled' AND (${enabled}) AND subscribers.attribs->'_dmailio'->>'consentConfirmed'='true' AND ${confirmed}`;
+  const unsubscribed =
+    "EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id=subscribers.id AND sl.status='unsubscribed')";
   if (status === "blocked")
     expressions.push("subscribers.status='blocklisted'");
-  else if (status === "disabled") expressions.push(`NOT (${enabled})`);
-  else if (status === "active")
+  else if (status === "disabled")
+    expressions.push(`subscribers.status<>'blocklisted' AND NOT (${enabled})`);
+  else if (status === "active") expressions.push(active);
+  else if (status === "unsubscribed")
     expressions.push(
-      `subscribers.status='enabled' AND (${enabled}) AND subscribers.attribs->'_dmailio'->>'consentConfirmed'='true'`,
+      `subscribers.status<>'blocklisted' AND (${enabled}) AND NOT COALESCE((${active}),false) AND ${unsubscribed}`,
+    );
+  else if (status === "unconfirmed")
+    expressions.push(
+      `subscribers.status<>'blocklisted' AND (${enabled}) AND NOT COALESCE((${active}),false) AND NOT (${unsubscribed})`,
     );
   else if (status && !["all", "unsubscribed", "unconfirmed"].includes(status))
     throw invalid("Неизвестный статус контакта");
-  if (status === "unsubscribed")
-    upstream.set("subscription_status", "unsubscribed");
-  if (status === "unconfirmed")
-    upstream.set("subscription_status", "unconfirmed");
   for (const [field, operator] of [
     ["addedFrom", ">="],
     ["addedTo", "<="],
   ])
     if (params.get(field)) {
-      const date = new Date(params.get(field));
+      const rawDate = params.get(field);
+      const date = new Date(rawDate);
       if (!Number.isFinite(date.getTime())) throw invalid("Некорректная дата");
+      if (field === "addedTo" && /^\d{4}-\d{2}-\d{2}$/.test(rawDate))
+        date.setUTCHours(23, 59, 59, 999);
       expressions.push(
         `subscribers.created_at ${operator} ${literal(date.toISOString())}::timestamptz`,
       );
@@ -182,8 +197,11 @@ export class Contacts {
         ? "blocked"
         : meta.enabled === false
           ? "disabled"
-          : lists.some((list) => list.subscription_status === "confirmed") &&
-              meta.consentConfirmed === true
+          : lists.some(
+                (list) =>
+                  list.subscription_status === "confirmed" &&
+                  list.status !== "archived",
+              ) && meta.consentConfirmed === true
             ? "active"
             : lists.some((list) => list.subscription_status === "unsubscribed")
               ? "unsubscribed"
