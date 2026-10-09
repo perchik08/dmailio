@@ -54,6 +54,33 @@ export class MarketingRepository {
     );
     return true;
   }
+  async link(kind, externalId, id) {
+    identifier(id);
+    if (
+      !["contact", "list"].includes(kind) ||
+      !Number.isSafeInteger(externalId) ||
+      externalId < 1
+    )
+      throw invalid("Некорректная ссылка на сервис подписчиков");
+    await this.pool.query(
+      "INSERT INTO marketing.external_ids(kind,external_id,id) VALUES($1,$2,$3) ON CONFLICT(kind,external_id) DO NOTHING",
+      [kind, externalId, id],
+    );
+    return id;
+  }
+  async externalId(kind, id) {
+    const { rows } = await this.pool.query(
+      "SELECT external_id FROM marketing.external_ids WHERE kind=$1 AND id=$2",
+      [kind, identifier(id)],
+    );
+    if (!rows.length)
+      throw new MarketingError(
+        "NOT_FOUND",
+        "Контакт или список не найден",
+        404,
+      );
+    return Number(rows[0].external_id);
+  }
   async document(id, client = this.pool) {
     const result = await client.query(
       "SELECT * FROM marketing.documents WHERE id=$1",

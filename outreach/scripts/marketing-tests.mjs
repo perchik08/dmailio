@@ -30,7 +30,11 @@ const args =
         "test",
         ...files.map((file) => `${directory}/${file}`),
       ]
-    : ["--test", ...files.map((file) => `${directory}/${file}`)];
+    : [
+        "--test",
+        ...(suite === "integration" ? ["--test-concurrency=1"] : []),
+        ...files.map((file) => `${directory}/${file}`),
+      ];
 const result = spawnSync(process.execPath, args, { stdio: "inherit" });
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);

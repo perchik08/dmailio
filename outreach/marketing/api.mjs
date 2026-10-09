@@ -1,10 +1,16 @@
 import { MarketingError, errorBody, unavailable } from "./contracts.mjs";
+import { Contacts } from "./contacts.mjs";
+import { Lists } from "./lists.mjs";
 
 export class MarketingAPI {
   constructor({ repository, listmonk } = {}) {
     Object.assign(this, { repository, listmonk });
+    if (repository && listmonk) {
+      this.contacts = new Contacts(listmonk, repository);
+      this.lists = new Lists(listmonk, repository, this.contacts);
+    }
   }
-  async handle({ path, method, send }) {
+  async handle({ path, method, url, data, send, res }) {
     if (!path.startsWith("/api/marketing/")) return false;
     try {
       if (!this.repository || !this.listmonk) throw unavailable();
@@ -16,6 +22,60 @@ export class MarketingAPI {
           cabinet: "current",
           massTransportConfigured: false,
         });
+      } else if (path === "/api/marketing/contacts" && method === "GET") {
+        send(await this.contacts.page(url.searchParams));
+      } else if (path === "/api/marketing/contacts" && method === "POST") {
+        send(await this.contacts.create(data), 201);
+      } else if (
+        path === "/api/marketing/contacts/export" &&
+        method === "POST"
+      ) {
+        const exported = await this.contacts.export(
+          new URLSearchParams(data.filter || {}),
+          data.ids,
+          data.format,
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="contacts.${data.format}"`,
+        );
+        send(exported.buffer, 200, exported.type);
+      } else if (/^\/api\/marketing\/contacts\/[^/]+$/.test(path)) {
+        const id = path.split("/").at(-1);
+        if (method === "GET") send(await this.contacts.get(id));
+        else if (method === "PUT") send(await this.contacts.update(id, data));
+        else
+          throw new MarketingError(
+            "METHOD_NOT_ALLOWED",
+            "Действие не поддерживается",
+            405,
+          );
+      } else if (path === "/api/marketing/lists" && method === "GET") {
+        send(await this.lists.page(url.searchParams));
+      } else if (path === "/api/marketing/lists" && method === "POST") {
+        send(await this.lists.create(data), 201);
+      } else if (
+        path === "/api/marketing/audience/preview" &&
+        method === "POST"
+      ) {
+        send(await this.lists.audience(data.listIds));
+      } else if (/^\/api\/marketing\/lists\/[^/]+(?:\/members)?$/.test(path)) {
+        const [id, action] = path
+          .slice("/api/marketing/lists/".length)
+          .split("/");
+        if (action === "members" && method === "GET")
+          send(await this.lists.memberPage(id, url.searchParams));
+        else if (action === "members" && method === "POST")
+          send(await this.lists.members(id, data.ids, data.action));
+        else if (!action && method === "GET") send(await this.lists.get(id));
+        else if (!action && method === "PUT")
+          send(await this.lists.update(id, data));
+        else
+          throw new MarketingError(
+            "METHOD_NOT_ALLOWED",
+            "Действие не поддерживается",
+            405,
+          );
       } else if (
         path.startsWith("/api/marketing/operations/") &&
         method === "GET"
