@@ -14,7 +14,10 @@ export async function request(path, data, method) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.message || "Не удалось выполнить действие");
+    throw Object.assign(
+      new Error(body.message || "Не удалось выполнить действие"),
+      { code: body.code, status: response.status },
+    );
   }
   return response;
 }

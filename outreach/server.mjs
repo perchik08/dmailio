@@ -465,6 +465,7 @@ export function createApp({
           "/marketing/lists.js",
           "/marketing/marketing.css",
           "/marketing/import.js",
+          "/marketing/letters.js",
         ].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);

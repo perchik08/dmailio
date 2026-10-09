@@ -112,7 +112,7 @@ export class MarketingRepository {
       throw invalid("Требуется сохранённая версия письма");
     return this.transaction(async (client) => {
       const result = await client.query(
-        "UPDATE marketing.documents SET data=$3,version=version+1,updated_at=now() WHERE id=$1 AND version=$2 RETURNING *",
+        "UPDATE marketing.documents SET data=$3,archived=COALESCE(($3::jsonb->>'archived')::boolean,archived),version=version+1,updated_at=now() WHERE id=$1 AND version=$2 RETURNING *",
         [id, expectedVersion, JSON.stringify(data)],
       );
       if (!result.rows.length) {

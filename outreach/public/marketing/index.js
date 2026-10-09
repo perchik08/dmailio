@@ -2,6 +2,7 @@ import { api, escape } from "./common.js";
 import { contacts } from "./contacts.js";
 import { lists } from "./lists.js";
 import { importForm, importStatus } from "./import.js";
+import { letters, letterEditor } from "./letters.js";
 export async function mountMarketing(root, refresh) {
   const [section, search = ""] = location.hash
     .slice("#marketing/".length)
@@ -9,7 +10,10 @@ export async function mountMarketing(root, refresh) {
   const params = new URLSearchParams(search);
   root.innerHTML = '<p role="status">Загрузка маркетинговой базы…</p>';
   try {
-    if (section === "import") await importForm(root, params);
+    if (section === "letters") await letters(root, params, refresh);
+    else if (/^letters\/[a-f\d-]{36}$/.test(section))
+      await letterEditor(root, section.split("/")[1]);
+    else if (section === "import") await importForm(root, params);
     else if (/^imports\/[\w-]+$/.test(section))
       await importStatus(root, section.split("/")[1]);
     else if (section === "contacts") await contacts(root, params, { refresh });

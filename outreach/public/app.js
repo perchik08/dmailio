@@ -194,6 +194,7 @@ function shell(body) {
     ["mailboxes", "Почты", "envelope"],
     ["marketing-contacts", "Контакты", "envelope"],
     ["marketing-lists", "Списки рассылки", "bullhorn"],
+    ["marketing-letters", "Письма рассылок", "envelope"],
   ]
     .map(
       ([id, name, glyph]) =>
@@ -233,9 +234,11 @@ async function refresh() {
   state = await api("/state");
   if (location.hash.startsWith("#marketing/")) {
     current = null;
-    page = location.hash.startsWith("#marketing/contacts")
-      ? "marketing-contacts"
-      : "marketing-lists";
+    page = location.hash.startsWith("#marketing/letters")
+      ? "marketing-letters"
+      : location.hash.startsWith("#marketing/contacts")
+        ? "marketing-contacts"
+        : "marketing-lists";
     shell('<section id="marketing-root"></section>');
     return mountMarketing(root.querySelector("#marketing-root"), refresh);
   }

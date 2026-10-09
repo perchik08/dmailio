@@ -13,6 +13,33 @@
 .mk-import [type="checkbox"] {
   width: auto;
 }
+.mk-letter-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 24px;
+}
+.mk-source {
+  padding: 20px;
+}
+.mk-source textarea {
+  min-height: 450px;
+  font-family: Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.mk-editor-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 900px) {
+  .mk-letter-fields,
+  .mk-editor-layout {
+    grid-template-columns: 1fr;
+  }
+}
 .mk-filters {
   display: flex;
   align-items: end;

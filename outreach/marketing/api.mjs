@@ -2,6 +2,7 @@ import { MarketingError, errorBody, unavailable } from "./contracts.mjs";
 import { Contacts } from "./contacts.mjs";
 import { Lists } from "./lists.mjs";
 import { Imports, importPreview, mappedRows } from "./import.mjs";
+import { Letters } from "./letters.mjs";
 
 export class MarketingAPI {
   constructor({ repository, listmonk } = {}) {
@@ -10,6 +11,7 @@ export class MarketingAPI {
       this.contacts = new Contacts(listmonk, repository);
       this.lists = new Lists(listmonk, repository, this.contacts);
       this.imports = new Imports(this.contacts, this.lists, repository);
+      this.letters = new Letters(repository);
     }
   }
   async handle({ path, method, url, data, send, res }) {
@@ -24,6 +26,29 @@ export class MarketingAPI {
           cabinet: "current",
           massTransportConfigured: false,
         });
+      } else if (path === "/api/marketing/letters" && method === "GET") {
+        send(await this.letters.page(url.searchParams));
+      } else if (path === "/api/marketing/letters" && method === "POST") {
+        send(await this.letters.create(data), 201);
+      } else if (
+        /^\/api\/marketing\/letters\/[^/]+(?:\/(?:copy|versions))?$/.test(path)
+      ) {
+        const [id, action] = path
+          .slice("/api/marketing/letters/".length)
+          .split("/");
+        if (action === "copy" && method === "POST")
+          send(await this.letters.copy(id, data), 201);
+        else if (action === "versions" && method === "GET")
+          send(await this.letters.versions(id));
+        else if (!action && method === "GET") send(await this.letters.get(id));
+        else if (!action && method === "PUT")
+          send(await this.letters.update(id, data));
+        else
+          throw new MarketingError(
+            "METHOD_NOT_ALLOWED",
+            "Действие не поддерживается",
+            405,
+          );
       } else if (
         path === "/api/marketing/imports/preview" &&
         method === "POST"
