@@ -101,7 +101,7 @@ test("two overlapping lists share one subscriber; membership removal and editing
     const consented = await contacts.create({
       email: `consented-${Date.now()}@example.invalid`,
       source: "Controlled fixture",
-      listIds: [b.id],
+      listIds: [a.id],
       consentConfirmed: true,
     });
     await lists.members(c.id, [consented.id], "add");
