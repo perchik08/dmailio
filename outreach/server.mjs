@@ -19,6 +19,7 @@ import { handleFullInbox } from "./full-inbox-api.mjs";
 import { MarketingAPI } from "./marketing/api.mjs";
 import { errorBody, MarketingError } from "./marketing/contracts.mjs";
 import { configuredMarketing } from "./marketing/config.mjs";
+import { CountdownCache } from "./marketing/countdown.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
@@ -40,6 +41,7 @@ export function createApp({
   const origin = new URL(publicURL).origin;
   const secure = origin.startsWith("https:");
   const sessions = new Map();
+  const countdowns = new CountdownCache();
   const attempts = new Map();
   return createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -64,6 +66,17 @@ export function createApp({
       const path = url.pathname;
       const method = req.method;
       if (path === "/healthz") return send({ ok: true });
+      if (path.startsWith("/marketing-countdown/") && method === "GET") {
+        try {
+          const image = countdowns.get(path);
+          if (!image) return send({ error: "Таймер не найден" }, 404);
+          res.setHeader("Cache-Control", "public, max-age=10");
+          return send(image, 200, "image/gif");
+        } catch (error) {
+          if (error.status === 429) res.setHeader("Retry-After", "1");
+          return send(errorBody(error), error.status || 503);
+        }
+      }
       const marketingImage = path.match(/^\/marketing-media\/([a-f\d]{64})$/);
       if (marketingImage && method === "GET") {
         if (!marketing.assets)
@@ -501,9 +514,18 @@ export function createApp({
           "/marketing/import.js",
           "/marketing/letters.js",
           "/marketing/editor-preview.js",
+          "/marketing/editor-builder.js",
+          "/marketing/builder.html",
+          "/marketing/builder-dist/builder.js",
+          "/marketing/builder-dist/email-builder.css",
         ].includes(path)
       ) {
         const name = path === "/" ? "index.html" : path.slice(1);
+        if (path === "/marketing/builder.html")
+          res.setHeader(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'",
+          );
         return send(
           await readFile(join(here, "public", name)),
           200,

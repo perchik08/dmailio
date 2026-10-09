@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY --chown=node:node . .
+RUN test -s /app/public/marketing/builder-dist/builder.js
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 ENV HOST=0.0.0.0 PORT=9100 DMAILIO_DATA=/app/data

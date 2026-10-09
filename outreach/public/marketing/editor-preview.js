@@ -84,7 +84,7 @@ export function mountPreview(root, id, editor) {
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `letter-${id}.${value.editorMode === "html" ? "html" : "md"}`;
+    link.download = `letter-${id}.${value.editorMode === "builder" ? "json" : value.editorMode === "html" ? "html" : "md"}`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
@@ -111,7 +111,10 @@ export function mountPreview(root, id, editor) {
           fallback = String(data.get("fallback")).trim();
         if (!/^[\p{L}\p{N}_ -]{1,80}$/u.test(name) || /[{}|]/.test(fallback))
           throw new Error("Проверьте название и запасное значение");
-        insert(editor.source, `{{${name}${fallback ? "|" + fallback : ""}}}`);
+        const token = `{{${name}${fallback ? "|" + fallback : ""}}}`;
+        if (editor.capture().editorMode === "builder")
+          editor.builderVariable(token);
+        else insert(editor.source, token);
       },
       { save: "Вставить" },
     ),
@@ -150,6 +153,10 @@ export function mountPreview(root, id, editor) {
           });
         }
         const mode = editor.capture().editorMode;
+        if (mode === "builder") {
+          editor.builderImage(asset, alt);
+          return;
+        }
         const publicURL = asset.url;
         const markup =
           mode === "html"

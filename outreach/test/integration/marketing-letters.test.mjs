@@ -72,6 +72,23 @@ test("letters persist independent sources, immutable versions and run snapshots;
       ).archived,
       false,
     );
+    const builder = await service.create({
+      title: "Builder persisted",
+      editorMode: "builder",
+      source: JSON.stringify({
+        schemaVersion: 1,
+        document: {
+          root: { type: "EmailLayout", data: { childrenIds: ["heading"] } },
+          heading: {
+            type: "Heading",
+            data: { props: { text: "Persisted builder" } },
+          },
+        },
+      }),
+    });
+    assert.match(builder.renderedHtml, /Persisted builder/);
+    const reloaded = await new Letters(repository).get(builder.id);
+    assert.deepEqual(JSON.parse(reloaded.source), JSON.parse(builder.source));
   } finally {
     await pool.end();
   }

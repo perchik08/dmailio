@@ -34,6 +34,7 @@ jobs:
           cache: npm
           cache-dependency-path: outreach/package-lock.json
       - run: npm ci --ignore-scripts
+      - run: npm run build:marketing:builder
       - run: npm test
       - run: npm run format:check
       - run: npm run format:check:marketing

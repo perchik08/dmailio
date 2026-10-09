@@ -4,6 +4,7 @@ import { lists } from "./lists.js";
 import { importForm, importStatus } from "./import.js";
 import { letters, letterEditor } from "./letters.js";
 export async function mountMarketing(root, refresh) {
+  root.disposeLetter?.();
   const [section, search = ""] = location.hash
     .slice("#marketing/".length)
     .split("?");

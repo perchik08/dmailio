@@ -4,6 +4,7 @@ import sanitize from "sanitize-html";
 import { convert } from "html-to-text";
 import { render, escapeHTML } from "../core.mjs";
 import { invalid } from "./contracts.mjs";
+import { builderHTML, builderResponsiveCSS } from "./builder.mjs";
 const size = /^(?:\d{1,4}(?:px|pt|em|rem|%)|auto)$/;
 const color = /^(?:#[a-f\d]{3,8}|[a-z]{1,20}|rgba?\([\d\s.,%]+\))$/i;
 const spacing =
@@ -55,7 +56,7 @@ export function compileSource(source, editorMode) {
       "center",
     ],
     allowedAttributes: {
-      "*": ["style", "align", "dir", "lang"],
+      "*": ["style", "align", "dir", "lang", "class"],
       a: ["href", "title", "target", "rel"],
       img: ["src", "alt", "title", "width", "height"],
       table: [
@@ -101,6 +102,7 @@ export function compileSource(source, editorMode) {
       },
     },
     allowedSchemes: ["https", "http", "mailto", "tel"],
+    allowedClasses: { "*": ["mk-column", "mk-row", "mk-reverse"] },
     allowedSchemesByTag: { img: ["https"] },
     allowProtocolRelative: false,
     transformTags: {
@@ -112,7 +114,10 @@ export function compileSource(source, editorMode) {
         const src = attrs.src || "";
         const allowed =
           /^https:\/\//i.test(src) ||
-          /^\/marketing-media\/[a-f\d]{64}$/.test(src);
+          /^\/marketing-media\/[a-f\d]{64}$/.test(src) ||
+          /^\/marketing-countdown\/\d{13}-[a-f\d]{6}-[a-f\d]{6}\.gif$/i.test(
+            src,
+          );
         return { tagName: tag, attribs: { ...attrs, src: allowed ? src : "" } };
       },
     },
@@ -134,6 +139,11 @@ export function renderLetter({
   rotationSeed = "preview",
   context = {},
 }) {
+  const builder = editorMode === "builder";
+  if (builder) {
+    source = builderHTML(source);
+    editorMode = "html";
+  }
   if (typeof source !== "string") throw invalid("Проверьте исходник письма");
   const fields = {
     ...contact.fields,
@@ -181,12 +191,12 @@ export function renderLetter({
     )
       throw invalid("Проверьте публичный адрес сервиса");
     content = content.replace(
-      /src="(\/marketing-media\/[a-f\d]{64})"/g,
+      /src="(\/(?:marketing-media\/[a-f\d]{64}|marketing-countdown\/\d{13}-[a-f\d]{6}-[a-f\d]{6}\.gif))"/g,
       (_, path) => `src="${escapeHTML(new URL(path, base.origin).href)}"`,
     );
   } else if (
     context.type === "production" &&
-    /src="\/marketing-media\//.test(content)
+    /src="\/marketing-(?:media|countdown)\//.test(content)
   )
     throw invalid("Для изображений требуется публичный адрес сервиса");
   const warnings = [];
@@ -205,6 +215,6 @@ export function renderLetter({
     footer = `<a href="${escapeHTML(url.href)}">Отписаться от рассылки</a>`;
   }
   const body = `${content}<div style="margin:24px 0;font-size:12px;color:#667085">${escapeHTML(context.organization || "Отправитель рассылки")}<br>${footer}</div>`;
-  const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${body}</body></html>`;
+  const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${builder ? builderResponsiveCSS : ""}</head><body>${body}</body></html>`;
   return { html, text: convert(body, { wordwrap: 100 }), warnings };
 }

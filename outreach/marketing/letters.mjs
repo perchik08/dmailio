@@ -5,18 +5,21 @@ import {
   identifier,
 } from "./contracts.mjs";
 import { compileSource } from "./render.mjs";
+import { builderHTML, emptyBuilder } from "./builder.mjs";
 export function letterInput(value) {
   const editorMode = value.editorMode || "html";
-  if (!["html", "markdown"].includes(editorMode))
+  if (!["html", "markdown", "builder"].includes(editorMode))
     throw invalid("Выберите HTML или Markdown");
-  const source = value.source ?? "";
+  const source =
+    value.source ||
+    (editorMode === "builder" ? JSON.stringify(emptyBuilder()) : "");
   if (typeof source !== "string" || source.length > 220000)
     throw invalid("Исходник письма: до 220 000 символов");
   const subject = String(value.subject ?? "");
   if (subject.length > 998 || /[\r\n]/.test(subject))
     throw invalid("Проверьте тему письма");
   const sources = {};
-  for (const mode of ["html", "markdown"]) {
+  for (const mode of ["html", "markdown", "builder"]) {
     const text = value.sources?.[mode] ?? "";
     if (typeof text !== "string" || text.length > 220000)
       throw invalid("Проверьте исходники редакторов");
@@ -30,7 +33,10 @@ export function letterInput(value) {
     editorMode,
     source,
     sources,
-    renderedHtml: compileSource(source, editorMode),
+    renderedHtml: compileSource(
+      editorMode === "builder" ? builderHTML(source) : source,
+      editorMode === "builder" ? "html" : editorMode,
+    ),
     archived: value.archived === true,
   };
 }
@@ -69,7 +75,7 @@ export class Letters {
       );
     }
     if (params.get("mode")) {
-      if (!["html", "markdown"].includes(params.get("mode")))
+      if (!["html", "markdown", "builder"].includes(params.get("mode")))
         throw invalid("Неизвестный редактор");
       values.push(params.get("mode"));
       where.push(`data->>'editorMode'=$${values.length}`);

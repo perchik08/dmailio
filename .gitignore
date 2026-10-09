@@ -20,3 +20,4 @@ dist/*
 uploads/
 outreach/test-results/
 outreach/playwright-report/
+outreach/public/marketing/builder-dist/

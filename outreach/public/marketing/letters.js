@@ -10,6 +10,7 @@ import {
   navigate,
 } from "./common.js";
 import { mountPreview } from "./editor-preview.js";
+import { mountBuilder } from "./editor-builder.js";
 export async function letters(root, params, refresh) {
   root.disposeLetter?.();
   const result = await api(`/letters?${params}`);
@@ -20,7 +21,7 @@ export async function letters(root, params, refresh) {
       '<button data-create class="primary">Письмо с нуля</button>',
     ) +
     `
-  <form data-filter class="panel mk-filters">${input("search", "Поиск писем", params.get("search"), "search")}<label>Редактор<select name="mode"><option value="">Все</option><option value="html" ${params.get("mode") === "html" ? "selected" : ""}>HTML</option><option value="markdown" ${params.get("mode") === "markdown" ? "selected" : ""}>Markdown</option></select></label><label>Показывать<select name="archived">${[
+  <form data-filter class="panel mk-filters">${input("search", "Поиск писем", params.get("search"), "search")}<label>Редактор<select name="mode"><option value="">Все</option><option value="html" ${params.get("mode") === "html" ? "selected" : ""}>HTML</option><option value="builder" ${params.get("mode") === "builder" ? "selected" : ""}>Конструктор</option><option value="markdown" ${params.get("mode") === "markdown" ? "selected" : ""}>Markdown</option></select></label><label>Показывать<select name="archived">${[
     ["false", "Активные"],
     ["true", "Архивные"],
     ["all", "Все"],
@@ -30,7 +31,7 @@ export async function letters(root, params, refresh) {
         `<option value="${key}" ${params.get("archived") === key ? "selected" : ""}>${label}</option>`,
     )
     .join("")}</select></label><button>Применить</button></form>
-  <div class="panel table-scroll"><table><thead><tr><th>Письмо</th><th>Редактор</th><th>Версия</th><th>Запусков</th><th>Изменено</th><th>Действия</th></tr></thead><tbody>${result.items.map((row) => `<tr><td><a href="#marketing/letters/${row.id}">${escape(row.title)}</a><p class="hint">${escape(row.subject)}</p></td><td>${row.editorMode === "html" ? "HTML" : "Markdown"}</td><td>${row.version}</td><td>${row.runCount}</td><td>${date(row.updatedAt)}</td><td><button data-copy="${row.id}">Копировать</button><button data-archive="${row.id}">${row.archived ? "Восстановить" : "В архив"}</button></td></tr>`).join("") || '<tr><td colspan="6">Писем пока нет. Создайте письмо с нуля.</td></tr>'}</tbody></table></div>${pager(result)}`;
+  <div class="panel table-scroll"><table><thead><tr><th>Письмо</th><th>Редактор</th><th>Версия</th><th>Запусков</th><th>Изменено</th><th>Действия</th></tr></thead><tbody>${result.items.map((row) => `<tr><td><a href="#marketing/letters/${row.id}">${escape(row.title)}</a><p class="hint">${escape(row.subject)}</p></td><td>${row.editorMode === "builder" ? "Конструктор" : row.editorMode === "html" ? "HTML" : "Markdown"}</td><td>${row.version}</td><td>${row.runCount}</td><td>${date(row.updatedAt)}</td><td><button data-copy="${row.id}">Копировать</button><button data-archive="${row.id}">${row.archived ? "Восстановить" : "В архив"}</button></td></tr>`).join("") || '<tr><td colspan="6">Писем пока нет. Создайте письмо с нуля.</td></tr>'}</tbody></table></div>${pager(result)}`;
   const on = (selector, event, fn) =>
     root
       .querySelectorAll(selector)
@@ -38,7 +39,7 @@ export async function letters(root, params, refresh) {
   on("[data-create]", "click", () =>
     dialog(
       "Письмо с нуля",
-      `${input("title", "Название письма", "Новое письмо", "text", 'required maxlength="200"')}<label>Редактор<select name="editorMode"><option value="html">HTML-редактор</option><option value="markdown">Markdown</option></select></label>`,
+      `${input("title", "Название письма", "Новое письмо", "text", 'required maxlength="200"')}<label>Редактор<select name="editorMode"><option value="html">HTML-редактор</option><option value="builder">Конструктор</option><option value="markdown">Markdown</option></select></label>`,
       async (data) => {
         const letter = await api("/letters", {
           title: data.get("title"),
@@ -105,7 +106,7 @@ export async function letterEditor(root, id) {
     ) +
     `
     <div class="panel mk-letter-fields">${input("title", "Название письма", letter.title, "text", 'required maxlength="200"')}${input("subject", "Тема письма", letter.subject, "text", 'maxlength="998"')}${input("preheader", "Прехедер", letter.preheader, "text", 'maxlength="500"')}
-    <label>Редактор<select data-mode><option value="html" ${letter.editorMode === "html" ? "selected" : ""}>HTML</option><option value="markdown" ${letter.editorMode === "markdown" ? "selected" : ""}>Markdown</option></select></label></div>
+    <label>Редактор<select data-mode><option value="html" ${letter.editorMode === "html" ? "selected" : ""}>HTML</option><option value="builder" ${letter.editorMode === "builder" ? "selected" : ""}>Конструктор</option><option value="markdown" ${letter.editorMode === "markdown" ? "selected" : ""}>Markdown</option></select></label></div>
     <p data-save-status role="status">Сохранено · версия ${letter.version}</p><div data-recovery></div><div data-conflict hidden><p role="alert">Письмо изменено в другой вкладке. Ваш ввод сохранён в этой вкладке. Сохраните копию или загрузите серверную версию.</p><button data-reload>Загрузить серверную версию</button></div>
     <div class="mk-editor-layout"><div class="panel mk-source"><label for="mk-letter-source">Исходник письма</label><textarea id="mk-letter-source" data-source spellcheck="false" maxlength="220000">${escape(letter.source)}</textarea></div><div data-editor-preview></div></div>`;
   const status = root.querySelector("[data-save-status]"),
@@ -152,12 +153,14 @@ export async function letterEditor(root, id) {
     inflight = (async () => {
       try {
         const saved = await api(`/letters/${id}`, payload, "PUT");
+        if (closed || !source.isConnected) return;
         letter.version = saved.version;
         savedRevision = at;
         status.textContent = `Сохранено · версия ${letter.version}`;
         if (revision === at) sessionStorage.removeItem(key);
         else remember();
       } catch (error) {
+        if (closed || !source.isConnected) return;
         remember();
         status.textContent = `Не сохранено: ${error.message}`;
         if (error.code === "VERSION_CONFLICT") {
@@ -251,10 +254,12 @@ export async function letterEditor(root, id) {
   root.getLetter = capture;
   const editor = { capture, source, save };
   const disposePreview = mountPreview(root, id, editor);
+  const disposeBuilder = mountBuilder(root, editor);
   root.disposeLetter = () => {
     closed = true;
     clearTimeout(timer);
     disposePreview();
+    disposeBuilder();
   };
   return editor;
 }
