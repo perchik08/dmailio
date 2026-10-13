@@ -193,9 +193,9 @@ function shell(body) {
     ["inbox", "Инбокс", "inbox"],
     ["analytics", "Аналитика", "chart-bar"],
     ["mailboxes", "Почты", "envelope"],
-    ["marketing-contacts", "Контакты", "envelope"],
-    ["marketing-lists", "Списки рассылки", "bullhorn"],
-    ["marketing-letters", "Письма рассылок", "envelope"],
+    ["marketing-contacts", "Контакты", "address-book"],
+    ["marketing-lists", "Списки рассылки", "list-ul"],
+    ["marketing-letters", "Письма рассылок", "file-lines"],
   ]
     .map(
       ([id, name, glyph]) =>
