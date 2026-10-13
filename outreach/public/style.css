@@ -1805,3 +1805,93 @@ td.num .warmup-score-head b {
   overflow: auto;
   padding-left: 22px;
 }
+
+/* Keep native select behavior while styling its picker in supported browsers. */
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]),
+  select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+  }
+
+  select:not([multiple]):not([size]) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    min-height: 42px;
+    cursor: pointer;
+    text-align: start;
+  }
+
+  select:not([multiple]):not([size]):hover:not(:disabled) {
+    border-color: #a7aee2;
+  }
+
+  select:not([multiple]):not([size]):open {
+    border-color: var(--accent);
+  }
+
+  select:not([multiple]):not([size]):disabled {
+    background: #f4f5f9;
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  select:not([multiple]):not([size])::picker-icon {
+    color: #697386;
+    margin-inline-start: auto;
+    flex-shrink: 0;
+  }
+
+  select:not([multiple]):not([size])::picker(select) {
+    font: inherit;
+    color: #252638;
+    background: #fff;
+    border: 1px solid #dce0eb;
+    border-radius: 12px;
+    padding: 5px;
+    margin-block: 6px;
+    inline-size: anchor-size(self-inline);
+    max-inline-size: calc(100vw - 24px);
+    max-block-size: min(360px, 60dvh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  select:not([multiple]):not([size]) option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 9px 12px;
+    border-radius: 7px;
+    line-height: 1.4;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  select:not([multiple]):not([size]) option:checked {
+    color: #3b46c9;
+    background: #eef0ff;
+    font-weight: 600;
+  }
+
+  select:not([multiple]):not([size]) option:hover:not(:disabled),
+  select:not([multiple]):not([size]) option:focus-visible {
+    background: #f0f2ff;
+    outline: none;
+  }
+
+  select:not([multiple]):not([size]) option:disabled {
+    color: #8a91a2;
+    cursor: not-allowed;
+  }
+
+  select:not([multiple]):not([size]) option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--accent);
+  }
+}
