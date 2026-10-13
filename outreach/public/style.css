@@ -1895,3 +1895,9 @@ td.num .warmup-score-head b {
     color: var(--accent);
   }
 }
+.ui-icon-list-ul {
+  --icon: url("/icons/list-ul.svg");
+}
+.ui-icon-file-lines {
+  --icon: url("/icons/file-lines.svg");
+}
