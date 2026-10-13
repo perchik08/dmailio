@@ -740,7 +740,12 @@ export class FullInboxStore {
         };
       const value = this.validateInput(input, true);
       requireValue(
-        this.owner.available(value.mailboxId, now),
+        this.owner.dispatch.budget(
+          value.mailboxId,
+          now,
+          1,
+          value.to.length + value.cc.length + value.bcc.length,
+        ).available,
         "Лимит или интервал отправки ящика исчерпан",
       );
       if (input.draftId)
@@ -783,6 +788,9 @@ export class FullInboxStore {
         },
         now,
       );
+      this.db
+        .prepare("UPDATE messages SET quota_units=? WHERE id=?")
+        .run(value.to.length + value.cc.length + value.bcc.length, row.id);
       this.db
         .prepare(
           "INSERT INTO full_inbox_outgoing(message_id,request_id,metadata,attachment_count) VALUES(?,?,?,?)",

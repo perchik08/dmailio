@@ -29,6 +29,7 @@ export function letterInput(value) {
   return {
     title: requiredString(value.title, "Название письма", 200),
     subject,
+    senderId: value.senderId ? identifier(value.senderId) : null,
     preheader: String(value.preheader ?? "").slice(0, 500),
     editorMode,
     source,
@@ -105,10 +106,31 @@ export class Letters {
     return this.map(await this.repository.document(identifier(id)));
   }
   async create(value) {
-    return this.map(await this.repository.createDocument(letterInput(value)));
+    let selected = Object.hasOwn(value, "senderId")
+      ? value.senderId
+      : this.senders?.page().defaultSenderId || null;
+    if (selected && this.senders) {
+      try {
+        this.senders.eligible(selected);
+      } catch (error) {
+        if (
+          Object.hasOwn(value, "senderId") ||
+          !["SENDER_UNAVAILABLE", "NOT_FOUND"].includes(error.code)
+        )
+          throw error;
+        selected = null;
+      }
+    }
+    return this.map(
+      await this.repository.createDocument(
+        letterInput({ ...value, senderId: selected }),
+      ),
+    );
   }
   async update(id, value) {
     const current = await this.get(id);
+    if (value.senderId && value.senderId !== current.senderId && this.senders)
+      this.senders.eligible(value.senderId);
     return this.map(
       await this.repository.updateDocument(
         id,
@@ -119,9 +141,22 @@ export class Letters {
   }
   async copy(id, value = {}) {
     const current = await this.get(id);
+    let senderId = Object.hasOwn(value, "senderId")
+      ? value.senderId
+      : current.senderId;
+    if (senderId && this.senders) {
+      try {
+        this.senders.eligible(senderId);
+      } catch (error) {
+        if (!["SENDER_UNAVAILABLE", "NOT_FOUND"].includes(error.code))
+          throw error;
+        senderId = null;
+      }
+    }
     return this.create({
       ...current,
       ...value,
+      senderId,
       title: value.title || `${current.title.slice(0, 190)} — копия`,
       archived: false,
     });

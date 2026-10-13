@@ -1,3 +1,4 @@
+import { settings } from "./settings.js";
 import { api, escape } from "./common.js";
 import { contacts } from "./contacts.js";
 import { lists } from "./lists.js";
@@ -11,7 +12,8 @@ export async function mountMarketing(root, refresh) {
   const params = new URLSearchParams(search);
   root.innerHTML = '<p role="status">Загрузка маркетинговой базы…</p>';
   try {
-    if (section === "letters") await letters(root, params, refresh);
+    if (section === "senders") await settings(root, refresh);
+    else if (section === "letters") await letters(root, params, refresh);
     else if (/^letters\/[a-f\d-]{36}$/.test(section))
       await letterEditor(root, section.split("/")[1]);
     else if (section === "import") await importForm(root, params);

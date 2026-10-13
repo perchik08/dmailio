@@ -288,6 +288,13 @@
 
 **Результат:** Реальная настройка хотя бы одного транспорта с подтверждёнными возможностями и квотами.
 
+Уточнение реализации 13.10.2026: текущий запрос — выбор существующих подключённых
+почт для рассылок. Добавляются общий `outreach/dispatch.mjs`, senderId документа,
+`/senders/:id/test` и `/senders/default`; сохранение квоты переписки учитывает
+To/Cc/Bcc. Транспорт не открывает массовый HTTP submit до подписок/очереди #24–#26.
+Вложения из дополнения к #23 остаются отдельным незавершённым пунктом;
+capability=false и явный отказ вместо неподтверждённых файлов. Всю #23 не закрывать.
+
 **Files:** новые `outreach/marketing/senders.mjs`, `transport.mjs`, `public/marketing/settings.js`; `outreach/test/marketing-transport.test.mjs`; документ `docs/marketing/transport.md`
 
 **Interfaces:**
