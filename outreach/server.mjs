@@ -16,6 +16,8 @@ import {
 } from "./import-table.mjs";
 import { previewImport, suggestColumnMappings } from "./import.mjs";
 import { handleFullInbox } from "./full-inbox-api.mjs";
+import { Senders } from "./marketing/senders.mjs";
+import { MarketingTransport } from "./marketing/transport.mjs";
 import { MarketingAPI } from "./marketing/api.mjs";
 import { errorBody, MarketingError } from "./marketing/contracts.mjs";
 import { configuredMarketing } from "./marketing/config.mjs";
@@ -38,6 +40,13 @@ export function createApp({
     typeof password === "string" && password.length >= 16,
     "DMAILIO_PASSWORD: минимум 16 символов",
   );
+  marketing.senders = new Senders(store, gateway);
+  marketing.transport = new MarketingTransport(
+    store,
+    gateway,
+    marketing.senders,
+  );
+  if (marketing.letters) marketing.letters.senders = marketing.senders;
   const origin = new URL(publicURL).origin;
   const secure = origin.startsWith("https:");
   const sessions = new Map();
@@ -515,6 +524,7 @@ export function createApp({
           "/marketing/letters.js",
           "/marketing/editor-preview.js",
           "/marketing/editor-builder.js",
+          "/marketing/settings.js",
           "/marketing/builder.html",
           "/marketing/builder-dist/builder.js",
           "/marketing/builder-dist/email-builder.css",

@@ -27,6 +27,7 @@ export class Worker {
       );
       this.store.finish(message.id, "sent");
     } catch (e) {
+      this.store.dispatch.fail(message.mailbox_id, e);
       this.store.finish(
         message.id,
         e.definitive ? "failed" : "unknown",

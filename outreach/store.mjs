@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { queryLeads } from "./leads.mjs";
+import { Dispatch } from "./dispatch.mjs";
 import { FullInboxStore } from "./full-inbox-store.mjs";
 import { contentFormat, renderContent, validateImage } from "./content.mjs";
 import {
@@ -112,6 +113,7 @@ export class Store {
         "ALTER TABLE leads ADD COLUMN preparation_error TEXT NOT NULL DEFAULT ''",
       );
     this.fullInbox = new FullInboxStore(this);
+    this.dispatch = new Dispatch(this);
   }
   close() {
     this.db.close();
@@ -322,6 +324,7 @@ export class Store {
     this.db
       .prepare("UPDATE mailboxes SET verified=?,error=? WHERE id=?")
       .run(ok ? 1 : 0, error, id);
+    if (ok && this.dispatch) this.dispatch.checked(id);
   }
   synced(id, cursor, now = Date.now()) {
     this.db
@@ -815,15 +818,9 @@ export class Store {
     return this.campaign(id);
   }
   available(mid, now, interval = 1) {
-    const m = this.mailbox(mid);
-    if (!m.enabled || !m.verified) return false;
-    const n = this.db
-      .prepare(
-        "SELECT count(*) n,max(created) last FROM messages WHERE mailbox_id=? AND direction='out' AND status IN ('sending','sent','unknown') AND created>?",
-      )
-      .get(mid, now - 86400000);
-    return n.n < m.limit && (!n.last || now - n.last >= interval * 60000);
+    return this.dispatch.budget(mid, now, interval).available;
   }
+
   reserve(now, healthy) {
     return this.transaction(() => {
       const rows = this.db
@@ -1322,7 +1319,7 @@ export class Store {
   analytics(campaign = "", since = 0) {
     const rows = this.db
       .prepare(
-        "SELECT m.*,l.email FROM messages m LEFT JOIN leads l ON l.id=m.lead_id WHERE kind!='warmup' AND (?='' OR m.campaign_id=?) AND m.created>=? ORDER BY m.created DESC",
+        "SELECT m.*,l.email FROM messages m LEFT JOIN leads l ON l.id=m.lead_id WHERE kind NOT IN ('warmup','marketing','marketing_test') AND (?='' OR m.campaign_id=?) AND m.created>=? ORDER BY m.created DESC",
       )
       .all(campaign, campaign, since);
     const sent = rows.filter(

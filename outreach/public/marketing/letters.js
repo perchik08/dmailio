@@ -102,6 +102,7 @@ export async function letterEditor(root, id) {
     tabId = crypto.randomUUID();
     sessionStorage.setItem("dmailio-editor-tab", tabId);
   }
+  const senders = await api("/senders");
   const prefix = `dmailio-letter-${id}-`,
     key = prefix + tabId;
   const dirty = () =>
@@ -120,6 +121,7 @@ export async function letterEditor(root, id) {
     ) +
     `
     <div class="panel mk-letter-fields">${input("title", "Название письма", letter.title, "text", 'required maxlength="200"')}${input("subject", "Тема письма", letter.subject, "text", 'maxlength="998"')}${input("preheader", "Прехедер", letter.preheader, "text", 'maxlength="500"')}
+    <label>Отправитель рассылки<select name="senderId"><option value="">Выбрать позже</option>${senders.items.map((row) => `<option value="${row.id}" ${row.id === letter.senderId ? "selected" : ""} ${!row.eligible && row.id !== letter.senderId ? "disabled" : ""}>${escape(row.email)}${row.eligible ? "" : " — недоступен"}</option>`).join("")}</select></label><a href="#marketing/senders">Настроить отправителей</a>
     <label>Редактор<select data-mode><option value="html" ${letter.editorMode === "html" ? "selected" : ""}>HTML</option><option value="builder" ${letter.editorMode === "builder" ? "selected" : ""}>Конструктор</option><option value="markdown" ${letter.editorMode === "markdown" ? "selected" : ""}>Markdown</option></select></label></div>
     <p data-save-status role="status">Сохранено · версия ${letter.version}</p><div data-recovery></div><div data-conflict hidden><p role="alert">Письмо изменено в другой вкладке. Ваш ввод сохранён в этой вкладке. Сохраните копию или загрузите серверную версию.</p><button data-reload>Загрузить серверную версию</button></div>
     <div class="mk-editor-layout"><div class="panel mk-source"><label for="mk-letter-source">Исходник письма</label><textarea id="mk-letter-source" data-source spellcheck="false" maxlength="220000">${escape(letter.source)}</textarea></div><div data-editor-preview></div></div>`;
@@ -130,6 +132,7 @@ export async function letterEditor(root, id) {
       ...letter,
       title: root.querySelector("[name=title]").value,
       subject: root.querySelector("[name=subject]").value,
+      senderId: root.querySelector("[name=senderId]").value || null,
       preheader: root.querySelector("[name=preheader]").value,
       source: source.value,
       sources: { ...letter.sources, [letter.editorMode]: source.value },
@@ -197,6 +200,7 @@ export async function letterEditor(root, id) {
       "[name=title],[name=subject],[name=preheader],[data-source]",
     )
     .forEach((element) => element.addEventListener("input", mark));
+  root.querySelector("[name=senderId]").onchange = mark;
   root.querySelector("[data-mode]").onchange = () => {
     capture();
     letter.editorMode = root.querySelector("[data-mode]").value;
@@ -277,6 +281,7 @@ export async function letterEditor(root, id) {
         };
         for (const name of ["title", "subject", "preheader"])
           root.querySelector(`[name=${name}]`).value = letter[name];
+        root.querySelector("[name=senderId]").value = letter.senderId || "";
         root.querySelector("[data-mode]").value = letter.editorMode;
         source.value = letter.source;
         root.querySelector("[data-recovery]").innerHTML = "";

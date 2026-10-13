@@ -1,3 +1,4 @@
+import { smtpCapabilities } from "./transport.mjs";
 import { MarketingError, errorBody, unavailable } from "./contracts.mjs";
 import { Contacts } from "./contacts.mjs";
 import { Lists } from "./lists.mjs";
@@ -21,6 +22,53 @@ export class MarketingAPI {
   async handle({ path, method, url, data, send, res, publicURL }) {
     if (!path.startsWith("/api/marketing/")) return false;
     try {
+      if (this.senders) {
+        if (path === "/api/marketing/senders" && method === "GET") {
+          send(this.senders.page());
+          return true;
+        }
+        if (path === "/api/marketing/senders/default" && method === "POST") {
+          send(this.senders.setDefault(data.senderId || null));
+          return true;
+        }
+        if (path === "/api/marketing/transports" && method === "GET") {
+          send({
+            items: this.senders.page().items.map((row) => ({
+              id: row.id,
+              type: "connected-smtp",
+              capabilities: smtpCapabilities,
+            })),
+          });
+          return true;
+        }
+        const profile = path.match(
+          /^\/api\/marketing\/senders\/([a-f\d-]{36})$/,
+        );
+        if (profile && method === "PUT") {
+          send(this.senders.update(profile[1], data));
+          return true;
+        }
+        const check = path.match(
+          /^\/api\/marketing\/transports\/([a-f\d-]{36})\/check$/,
+        );
+        if (check && method === "POST") {
+          send(await this.senders.check(check[1]));
+          return true;
+        }
+        const test = path.match(
+          /^\/api\/marketing\/senders\/([a-f\d-]{36})\/test$/,
+        );
+        if (test && method === "POST") {
+          send(
+            await this.transport.test(
+              test[1],
+              data.recipient,
+              data.operationId,
+            ),
+          );
+          return true;
+        }
+      }
       if (!this.repository || !this.listmonk) throw unavailable();
       if (path === "/api/marketing/status" && method === "GET") {
         await this.repository.health();

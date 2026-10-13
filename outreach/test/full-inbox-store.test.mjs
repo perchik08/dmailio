@@ -227,6 +227,11 @@ test("outgoing validates headers, payload size and stored reply headers", (t) =>
 
 test("reply-all excludes own address and forwards trusted original body and attachments", (t) => {
   const { inbox, mailbox, owner } = setup(t);
+  owner.db
+    .prepare(
+      "UPDATE mailboxes SET config=json_set(config,'$.limit',4) WHERE id=?",
+    )
+    .run(mailbox.id);
   const parent = inbox.capture(
     mailbox.id,
     incoming("forward", {
@@ -259,6 +264,7 @@ test("reply-all excludes own address and forwards trusted original body and atta
     "other@example.com",
     "copy@example.com",
   ]);
+  assert.equal(owner.dispatch.budget(mailbox.id, 1000000).used, 3);
   owner.finish(reply.id, "sent", 1000001);
   const forward = inbox.reserveOutgoing(
     {
