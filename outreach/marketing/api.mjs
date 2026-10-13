@@ -33,13 +33,11 @@ export class MarketingAPI {
         }
         if (path === "/api/marketing/transports" && method === "GET") {
           send({
-            items: this.senders
-              .page()
-              .items.map((row) => ({
-                id: row.id,
-                type: "connected-smtp",
-                capabilities: smtpCapabilities,
-              })),
+            items: this.senders.page().items.map((row) => ({
+              id: row.id,
+              type: "connected-smtp",
+              capabilities: smtpCapabilities,
+            })),
           });
           return true;
         }

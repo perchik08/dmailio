@@ -58,6 +58,68 @@ const message = (box) => ({
   html: "<p>Body</p>",
   test: true,
 });
+
+test("connection checks and provider failures do not freeze unconfigured mailbox limits", () => {
+  const store = new Store(":memory:", "a".repeat(64));
+  try {
+    const box = store.saveMailbox({ ...mailbox, limit: 3 });
+    store.markMailbox(box.id, true);
+    store.saveMailboxSettings(box.id, { limit: 10, name: "Anna" });
+    assert.equal(store.dispatch.budget(box.id).limit, 10);
+    store.dispatch.fail(box.id, { responseCode: 421 }, 1000000);
+    store.saveMailboxSettings(box.id, { limit: 12, name: "Anna" });
+    assert.equal(store.dispatch.budget(box.id, 2000000).limit, 12);
+    const senders = new Senders(store, {});
+    senders.update(box.id, { providerDailyLimit: 7 });
+    store.saveMailboxSettings(box.id, { limit: 15, name: "Anna" });
+    store.markMailbox(box.id, true);
+    assert.equal(store.dispatch.budget(box.id).limit, 7);
+  } finally {
+    store.close();
+  }
+});
+test("interrupted quota migration rolls back its schema change and can restart", () => {
+  const { store } = setup();
+  const db = store.db;
+  try {
+    db.exec("ALTER TABLE messages DROP COLUMN quota_units");
+    store.db = new Proxy(db, {
+      get(target, key) {
+        if (key === "exec")
+          return (sql) => {
+            if (sql.startsWith("UPDATE messages SET quota_units="))
+              throw new Error("simulated migration interruption");
+            return target.exec(sql);
+          };
+        const value = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    assert.throws(
+      () => new store.dispatch.constructor(store),
+      /simulated migration interruption/,
+    );
+    store.db = db;
+    assert.equal(
+      db
+        .prepare("PRAGMA table_info(messages)")
+        .all()
+        .some((column) => column.name === "quota_units"),
+      false,
+    );
+    new store.dispatch.constructor(store);
+    assert.equal(
+      db
+        .prepare("PRAGMA table_info(messages)")
+        .all()
+        .some((column) => column.name === "quota_units"),
+      true,
+    );
+  } finally {
+    store.db = db;
+    store.close();
+  }
+});
 test("connected mailbox sender profiles are persistent, secret-free and cannot spoof From", () => {
   const { store, box, senders } = setup();
   try {

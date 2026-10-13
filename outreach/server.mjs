@@ -41,7 +41,11 @@ export function createApp({
     "DMAILIO_PASSWORD: минимум 16 символов",
   );
   marketing.senders = new Senders(store, gateway);
-  marketing.transport = new MarketingTransport(store, gateway, marketing.senders);
+  marketing.transport = new MarketingTransport(
+    store,
+    gateway,
+    marketing.senders,
+  );
   if (marketing.letters) marketing.letters.senders = marketing.senders;
   const origin = new URL(publicURL).origin;
   const secure = origin.startsWith("https:");

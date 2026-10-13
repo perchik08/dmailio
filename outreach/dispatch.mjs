@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { invalid, MarketingError } from "./marketing/contracts.mjs";
+import { MarketingError } from "./marketing/contracts.mjs";
 export const providerCeiling = (mailbox) =>
   /^(smtp\.gmail\.com)$/i.test(mailbox.smtp.host)
     ? 500
@@ -13,19 +13,21 @@ export class Dispatch {
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS mailbox_dispatch_policy(mailbox_id TEXT PRIMARY KEY REFERENCES mailboxes(id),settings TEXT NOT NULL DEFAULT '{}',paused_until INTEGER NOT NULL DEFAULT 0,blocked INTEGER NOT NULL DEFAULT 0,reason TEXT NOT NULL DEFAULT '',checked_at INTEGER NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS marketing_sender_default(id INTEGER PRIMARY KEY CHECK(id=1),mailbox_id TEXT REFERENCES mailboxes(id));CREATE TABLE IF NOT EXISTS marketing_outgoing(request_key TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,message_id TEXT NOT NULL UNIQUE REFERENCES messages(id),payload TEXT NOT NULL,provider_message_id TEXT);`,
     );
-    if (
-      !this.db
-        .prepare("PRAGMA table_info(messages)")
-        .all()
-        .some((c) => c.name === "quota_units")
-    ) {
-      this.db.exec(
-        "ALTER TABLE messages ADD COLUMN quota_units INTEGER NOT NULL DEFAULT 1",
-      );
-      this.db.exec(
-        `UPDATE messages SET quota_units=coalesce((SELECT max(1,json_array_length(metadata,'$.to')+json_array_length(metadata,'$.cc')+json_array_length(metadata,'$.bcc')) FROM full_inbox_outgoing WHERE full_inbox_outgoing.message_id=messages.id),1)`,
-      );
-    }
+    this.store.transaction(() => {
+      if (
+        !this.db
+          .prepare("PRAGMA table_info(messages)")
+          .all()
+          .some((c) => c.name === "quota_units")
+      ) {
+        this.db.exec(
+          "ALTER TABLE messages ADD COLUMN quota_units INTEGER NOT NULL DEFAULT 1",
+        );
+        this.db.exec(
+          `UPDATE messages SET quota_units=coalesce((SELECT max(1,json_array_length(metadata,'$.to')+json_array_length(metadata,'$.cc')+json_array_length(metadata,'$.bcc')) FROM full_inbox_outgoing WHERE full_inbox_outgoing.message_id=messages.id),1)`,
+        );
+      }
+    });
   }
   policy(id) {
     const m = this.store.mailbox(id);
@@ -47,9 +49,13 @@ export class Dispatch {
     };
   }
   save(id, value) {
-    const policy = this.policy(id);
+    const row = this.db
+      .prepare(
+        "SELECT settings FROM mailbox_dispatch_policy WHERE mailbox_id=?",
+      )
+      .get(id);
     const { pausedUntil, blocked, reason, checkedAt, ...settings } = {
-      ...policy,
+      ...(row ? JSON.parse(row.settings) : {}),
       ...value,
     };
     this.db
