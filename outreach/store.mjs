@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { queryLeads } from "./leads.mjs";
 import { Dispatch } from "./dispatch.mjs";
+import { MailboxConnections } from "./mailbox-connections.mjs";
 import { FullInboxStore } from "./full-inbox-store.mjs";
 import { contentFormat, renderContent, validateImage } from "./content.mjs";
 import {
@@ -114,6 +115,7 @@ export class Store {
       );
     this.fullInbox = new FullInboxStore(this);
     this.dispatch = new Dispatch(this);
+    this.connections = new MailboxConnections(this);
   }
   close() {
     this.db.close();
@@ -147,70 +149,103 @@ export class Store {
     return JSON.parse(Buffer.concat([cipher.update(data), cipher.final()]));
   }
   saveMailbox(input) {
-    const address = email(input.email);
-    const id = input.id || randomUUID();
-    const old = input.id ? this.mailbox(id, true) : null;
-    requireValue(
-      Number.isInteger(input.limit) && input.limit >= 1 && input.limit <= 10000,
-      "Лимит ящика: 1–10000",
-    );
-    const cfg = {
-      email: address,
-      name: String(input.name || "").slice(0, 100),
-      surname: String(input.surname || "").slice(0, 100),
-      signature:
-        old?.signature ?? String(input.signature || "").slice(0, 20000),
-      signatureFormat: old?.signatureFormat || "plain",
-      signatureEnabled: old?.signatureEnabled !== false,
-      dkimSelector: old?.dkimSelector ?? "",
-      limit: input.limit,
-      enabled: input.enabled !== false,
-      warmup: old?.warmup || {
-        enabled: false,
-        consent: false,
-        start: 2,
-        increase: 1,
-        max: 10,
-        since: 0,
-        pausedAt: 0,
-        mode: "automatic-v1",
-        providers: warmupProviders,
-        planCredit: 0,
-      },
-    };
-    const secrets = {};
-    for (const type of ["smtp", "imap"]) {
-      const v = input[type];
+    return this.transaction(() => {
+      const address = email(input.email);
+      const existing = this.db
+        .prepare("SELECT id FROM mailboxes WHERE email=?")
+        .get(address);
+      const prior = input.id
+        ? this.mailbox(input.id)
+        : existing
+          ? this.mailbox(existing.id)
+          : null;
       requireValue(
-        v &&
-          /^[a-z0-9.-]+$/i.test(v.host || "") &&
-          Number.isInteger(v.port) &&
-          v.port > 0 &&
-          v.port < 65536,
-        `Проверьте ${type.toUpperCase()} host/port`,
+        input.id || !prior || prior.detached,
+        "Эта почта уже подключена. Измените существующее подключение.",
       );
-      cfg[type] = {
-        host: v.host,
-        port: v.port,
-        secure: v.secure !== false,
-        user: String(v.user || address),
+      requireValue(
+        !prior?.detached || prior.email === address,
+        "Для нового адреса создайте отдельное подключение",
+      );
+      const id = input.id || prior?.id || randomUUID();
+      const old = prior?.detached
+        ? prior
+        : prior
+          ? this.mailbox(prior.id, true)
+          : null;
+      requireValue(
+        Number.isInteger(input.limit) &&
+          input.limit >= 1 &&
+          input.limit <= 10000,
+        "Лимит ящика: 1–10000",
+      );
+      const cfg = {
+        email: address,
+        name: String(input.name || "").slice(0, 100),
+        surname: String(input.surname || "").slice(0, 100),
+        signature:
+          old?.signature ?? String(input.signature || "").slice(0, 20000),
+        signatureFormat: old?.signatureFormat || "plain",
+        signatureEnabled: old?.signatureEnabled !== false,
+        dkimSelector: old?.dkimSelector ?? "",
+        limit: input.limit,
+        enabled: input.enabled !== false,
+        detachedAt: 0,
+        connectionRevision: (old?.connectionRevision || 0) + 1,
+        warmup: old?.warmup || {
+          enabled: false,
+          consent: false,
+          start: 2,
+          increase: 1,
+          max: 10,
+          since: 0,
+          pausedAt: 0,
+          mode: "automatic-v1",
+          providers: warmupProviders,
+          planCredit: 0,
+        },
       };
-      secrets[type] = v.password || old?.[type]?.password;
+      const secrets = {};
+      for (const type of ["smtp", "imap"]) {
+        const v = input[type];
+        requireValue(
+          v &&
+            /^[a-z0-9.-]+$/i.test(v.host || "") &&
+            Number.isInteger(v.port) &&
+            v.port > 0 &&
+            v.port < 65536,
+          `Проверьте ${type.toUpperCase()} host/port`,
+        );
+        cfg[type] = {
+          host: v.host,
+          port: v.port,
+          secure: v.secure !== false,
+          user: String(v.user || address),
+        };
+        secrets[type] =
+          v.password || (!old?.detached ? old?.[type]?.password : undefined);
+        requireValue(
+          typeof secrets[type] === "string" && secrets[type].length > 0,
+          `Нужен пароль ${type.toUpperCase()}`,
+        );
+      }
       requireValue(
-        typeof secrets[type] === "string" && secrets[type].length > 0,
-        `Нужен пароль ${type.toUpperCase()}`,
+        !/[\r\n]/.test(cfg.name + cfg.surname),
+        "Имя не должно содержать переносы",
       );
-    }
-    requireValue(
-      !/[\r\n]/.test(cfg.name + cfg.surname),
-      "Имя не должно содержать переносы",
-    );
-    this.db
-      .prepare(
-        `INSERT INTO mailboxes(id,email,config,secrets) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,config=excluded.config,secrets=excluded.secrets,verified=0`,
-      )
-      .run(id, address, json(cfg), this.seal(secrets));
-    return this.mailbox(id);
+      this.db
+        .prepare(
+          `INSERT INTO mailboxes(id,email,config,secrets) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,config=excluded.config,secrets=excluded.secrets,verified=0`,
+        )
+        .run(id, address, json(cfg), this.seal(secrets));
+      if (prior?.detached)
+        this.db
+          .prepare(
+            "UPDATE mailboxes SET cursor='{}',last_sync=0,error='' WHERE id=?",
+          )
+          .run(id);
+      return this.mailbox(id);
+    });
   }
   mailbox(id, secrets = false) {
     const row = this.db.prepare("SELECT * FROM mailboxes WHERE id=?").get(id);
@@ -231,18 +266,36 @@ export class Store {
     };
     const result = {
       ...cfg,
+      detached: Boolean(cfg.detachedAt),
+      connectionRevision: cfg.connectionRevision || 0,
       id,
       verified: !!row.verified,
       error: row.error,
       lastSync: row.last_sync,
     };
     if (secrets) {
+      if (result.detached) this.assertMailboxConnection(result);
       const s = this.unseal(row.secrets);
       for (const t of ["smtp", "imap"])
         result[t] = { ...result[t], password: s[t] };
       result.cursor = JSON.parse(row.cursor);
     }
     return result;
+  }
+  assertMailboxConnection(snapshot) {
+    return this.connections.assert(snapshot);
+  }
+  beginMailboxIO(snapshot, now) {
+    return this.connections.begin(snapshot, now);
+  }
+  touchMailboxIO(id, now) {
+    return this.connections.touch(id, now);
+  }
+  endMailboxIO(id) {
+    this.connections.end(id);
+  }
+  disconnectMailbox(id, now) {
+    return this.connections.disconnect(id, now);
   }
   mailboxes() {
     return this.db
@@ -251,53 +304,59 @@ export class Store {
       .map((r) => this.mailbox(r.id));
   }
   saveMailboxSettings(id, input) {
-    requireValue(
-      Number.isInteger(input.limit) && input.limit >= 1 && input.limit <= 10000,
-      "Лимит ящика: 1–10000",
-    );
-    const name = String(input.name || "").slice(0, 100);
-    const surname = String(input.surname || "").slice(0, 100);
-    const dkimSelector = String(input.dkimSelector || "")
-      .trim()
-      .toLowerCase();
-    requireValue(
-      !/[\r\n]/.test(name + surname),
-      "Имя не должно содержать переносы",
-    );
-    requireValue(
-      !dkimSelector || /^[a-z0-9_-]{1,63}$/i.test(dkimSelector),
-      "Селектор DKIM: латиница, цифры, дефис или подчёркивание",
-    );
-    const row = this.db
-      .prepare("SELECT config FROM mailboxes WHERE id=?")
-      .get(id);
-    requireValue(row, "Ящик не найден");
-    const cfg = JSON.parse(row.config);
-    Object.assign(cfg, { name, surname, limit: input.limit, dkimSelector });
-    this.db
-      .prepare("UPDATE mailboxes SET config=? WHERE id=?")
-      .run(json(cfg), id);
-    return this.mailbox(id);
+    return this.transaction(() => {
+      requireValue(
+        Number.isInteger(input.limit) &&
+          input.limit >= 1 &&
+          input.limit <= 10000,
+        "Лимит ящика: 1–10000",
+      );
+      const name = String(input.name || "").slice(0, 100);
+      const surname = String(input.surname || "").slice(0, 100);
+      const dkimSelector = String(input.dkimSelector || "")
+        .trim()
+        .toLowerCase();
+      requireValue(
+        !/[\r\n]/.test(name + surname),
+        "Имя не должно содержать переносы",
+      );
+      requireValue(
+        !dkimSelector || /^[a-z0-9_-]{1,63}$/i.test(dkimSelector),
+        "Селектор DKIM: латиница, цифры, дефис или подчёркивание",
+      );
+      const row = this.db
+        .prepare("SELECT config FROM mailboxes WHERE id=?")
+        .get(id);
+      requireValue(row, "Ящик не найден");
+      const cfg = JSON.parse(row.config);
+      Object.assign(cfg, { name, surname, limit: input.limit, dkimSelector });
+      this.db
+        .prepare("UPDATE mailboxes SET config=? WHERE id=?")
+        .run(json(cfg), id);
+      return this.mailbox(id);
+    });
   }
   saveSignature(id, input) {
-    requireValue(
-      typeof input.body === "string" && input.body.length <= 20000,
-      "Подпись: максимум 20 000 символов",
-    );
-    const format = contentFormat(input.format);
-    renderContent({ body: input.body, format }, (id) => this.image(id));
-    const row = this.db
-      .prepare("SELECT config FROM mailboxes WHERE id=?")
-      .get(id);
-    requireValue(row, "Ящик не найден");
-    const cfg = JSON.parse(row.config);
-    cfg.signature = input.body;
-    cfg.signatureFormat = format;
-    cfg.signatureEnabled = input.enabled !== false;
-    this.db
-      .prepare("UPDATE mailboxes SET config=? WHERE id=?")
-      .run(json(cfg), id);
-    return this.mailbox(id);
+    return this.transaction(() => {
+      requireValue(
+        typeof input.body === "string" && input.body.length <= 20000,
+        "Подпись: максимум 20 000 символов",
+      );
+      const format = contentFormat(input.format);
+      renderContent({ body: input.body, format }, (id) => this.image(id));
+      const row = this.db
+        .prepare("SELECT config FROM mailboxes WHERE id=?")
+        .get(id);
+      requireValue(row, "Ящик не найден");
+      const cfg = JSON.parse(row.config);
+      cfg.signature = input.body;
+      cfg.signatureFormat = format;
+      cfg.signatureEnabled = input.enabled !== false;
+      this.db
+        .prepare("UPDATE mailboxes SET config=? WHERE id=?")
+        .run(json(cfg), id);
+      return this.mailbox(id);
+    });
   }
   saveImage(data, mime) {
     validateImage(data, mime);
@@ -320,23 +379,49 @@ export class Store {
   rendered(message, forEmail = false) {
     return renderContent(message, (id) => this.image(id), forEmail);
   }
-  markMailbox(id, ok, error = "") {
-    this.db
-      .prepare("UPDATE mailboxes SET verified=?,error=? WHERE id=?")
-      .run(ok ? 1 : 0, error, id);
-    if (ok && this.dispatch) this.dispatch.checked(id);
-  }
-  synced(id, cursor, now = Date.now()) {
-    this.db
-      .prepare("UPDATE mailboxes SET last_sync=?,cursor=?,error='' WHERE id=?")
-      .run(now, json(cursor), id);
-  }
-  syncError(id) {
-    this.db
-      .prepare(
-        "UPDATE mailboxes SET error='Не удалось синхронизировать входящие. Проверьте подключение.' WHERE id=?",
+  markMailbox(id, ok, error = "", revision) {
+    return this.transaction(() => {
+      const m = this.mailbox(id);
+      if (
+        m.detached ||
+        (revision !== undefined && revision !== m.connectionRevision)
       )
-      .run(id);
+        return;
+      this.db
+        .prepare("UPDATE mailboxes SET verified=?,error=? WHERE id=?")
+        .run(ok ? 1 : 0, error, id);
+      if (ok && this.dispatch) this.dispatch.checked(id);
+    });
+  }
+  synced(id, cursor, now = Date.now(), revision) {
+    return this.transaction(() => {
+      const m = this.mailbox(id);
+      if (
+        m.detached ||
+        (revision !== undefined && revision !== m.connectionRevision)
+      )
+        return;
+      this.db
+        .prepare(
+          "UPDATE mailboxes SET last_sync=?,cursor=?,error='' WHERE id=?",
+        )
+        .run(now, json(cursor), id);
+    });
+  }
+  syncError(id, revision) {
+    return this.transaction(() => {
+      const m = this.mailbox(id);
+      if (
+        m.detached ||
+        (revision !== undefined && revision !== m.connectionRevision)
+      )
+        return;
+      this.db
+        .prepare(
+          "UPDATE mailboxes SET error='Не удалось синхронизировать входящие. Проверьте подключение.' WHERE id=?",
+        )
+        .run(id);
+    });
   }
   placementCursor(mailboxId, folder) {
     const row = this.db
@@ -1366,75 +1451,83 @@ export class Store {
         .run(randomUUID(), m.id, now);
   }
   warmup(id, input, now = Date.now()) {
-    const m = this.mailbox(id);
-    const enabled = !!input.enabled;
-    let since = m.warmup.since || 0;
-    let pausedAt = m.warmup.pausedAt || 0;
-    if (enabled && !m.warmup.enabled) {
-      if (!since) since = now;
-      pausedAt = 0;
-    } else if (!enabled && m.warmup.enabled) pausedAt = now;
-    const mode = input.reset
-      ? "automatic-v1"
-      : input.mode || m.warmup.mode || "automatic-v1";
-    requireValue(
-      ["automatic-v1", "custom"].includes(mode),
-      "Неизвестный режим прогрева",
-    );
-    const start = mode === "custom" ? Number(input.start ?? m.warmup.start) : 2;
-    const increase =
-      mode === "custom" ? Number(input.increase ?? m.warmup.increase) : 1;
-    const max = mode === "custom" ? Number(input.max ?? m.warmup.max) : 10;
-    requireValue(
-      [start, increase, max].every(
-        (value) => Number.isInteger(value) && value >= 1 && value <= 100,
-      ) && start <= max,
-      "Параметры прогрева: 1–100, старт не больше максимума",
-    );
-    const providers = input.reset
-      ? warmupProviders
-      : [...new Set(input.providers || m.warmup.providers || warmupProviders)];
-    requireValue(
-      providers.length > 0 &&
-        providers.every((provider) => warmupProviders.includes(provider)),
-      "Выберите доступные почтовые сервисы для прогрева",
-    );
-    const oldPlan = warmupTargets(m.warmup);
-    const sentSince = since
-      ? this.db
-          .prepare(
-            "SELECT count(*) n FROM messages WHERE mailbox_id=? AND kind='warmup' AND direction='out' AND status='sent' AND created>=?",
-          )
-          .get(id, since).n
-      : 0;
-    const oldCredit = Math.min(
-      1,
-      sentSince / oldPlan.reduce((sum, value) => sum + value, 0),
-    );
-    const w = {
-      enabled,
-      consent: !!input.consent,
-      start,
-      increase,
-      max,
-      since,
-      pausedAt,
-      mode,
-      providers,
-      planCredit: Math.max(m.warmup.planCredit || 0, oldCredit),
-    };
-    requireValue(
-      !w.enabled || (w.consent && m.verified),
-      "Для прогрева нужны согласие владельца и проверенное подключение",
-    );
-    const cfg = JSON.parse(
-      this.db.prepare("SELECT config FROM mailboxes WHERE id=?").get(id).config,
-    );
-    cfg.warmup = w;
-    this.db
-      .prepare("UPDATE mailboxes SET config=? WHERE id=?")
-      .run(json(cfg), id);
-    return this.mailbox(id);
+    return this.transaction(() => {
+      const m = this.mailbox(id);
+      const enabled = !!input.enabled;
+      let since = m.warmup.since || 0;
+      let pausedAt = m.warmup.pausedAt || 0;
+      if (enabled && !m.warmup.enabled) {
+        if (!since) since = now;
+        pausedAt = 0;
+      } else if (!enabled && m.warmup.enabled) pausedAt = now;
+      const mode = input.reset
+        ? "automatic-v1"
+        : input.mode || m.warmup.mode || "automatic-v1";
+      requireValue(
+        ["automatic-v1", "custom"].includes(mode),
+        "Неизвестный режим прогрева",
+      );
+      const start =
+        mode === "custom" ? Number(input.start ?? m.warmup.start) : 2;
+      const increase =
+        mode === "custom" ? Number(input.increase ?? m.warmup.increase) : 1;
+      const max = mode === "custom" ? Number(input.max ?? m.warmup.max) : 10;
+      requireValue(
+        [start, increase, max].every(
+          (value) => Number.isInteger(value) && value >= 1 && value <= 100,
+        ) && start <= max,
+        "Параметры прогрева: 1–100, старт не больше максимума",
+      );
+      const providers = input.reset
+        ? warmupProviders
+        : [
+            ...new Set(
+              input.providers || m.warmup.providers || warmupProviders,
+            ),
+          ];
+      requireValue(
+        providers.length > 0 &&
+          providers.every((provider) => warmupProviders.includes(provider)),
+        "Выберите доступные почтовые сервисы для прогрева",
+      );
+      const oldPlan = warmupTargets(m.warmup);
+      const sentSince = since
+        ? this.db
+            .prepare(
+              "SELECT count(*) n FROM messages WHERE mailbox_id=? AND kind='warmup' AND direction='out' AND status='sent' AND created>=?",
+            )
+            .get(id, since).n
+        : 0;
+      const oldCredit = Math.min(
+        1,
+        sentSince / oldPlan.reduce((sum, value) => sum + value, 0),
+      );
+      const w = {
+        enabled,
+        consent: !!input.consent,
+        start,
+        increase,
+        max,
+        since,
+        pausedAt,
+        mode,
+        providers,
+        planCredit: Math.max(m.warmup.planCredit || 0, oldCredit),
+      };
+      requireValue(
+        !w.enabled || (w.consent && m.verified),
+        "Для прогрева нужны согласие владельца и проверенное подключение",
+      );
+      const cfg = JSON.parse(
+        this.db.prepare("SELECT config FROM mailboxes WHERE id=?").get(id)
+          .config,
+      );
+      cfg.warmup = w;
+      this.db
+        .prepare("UPDATE mailboxes SET config=? WHERE id=?")
+        .run(json(cfg), id);
+      return this.mailbox(id);
+    });
   }
   bulkWarmup(ids, enabled, now = Date.now()) {
     requireValue(
@@ -1539,7 +1632,8 @@ export class Store {
         receiving: connectionHealthy && warmupStats.received ? 15 : 0,
       };
       let warmupStatus = "paused";
-      if (!m.verified) warmupStatus = "unverified";
+      if (m.detached) warmupStatus = "detached";
+      else if (!m.verified) warmupStatus = "unverified";
       else if (!m.enabled || m.error) warmupStatus = "error";
       else if (m.warmup?.enabled && m.warmup.consent)
         warmupStatus = activePool.some(

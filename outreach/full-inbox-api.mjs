@@ -45,7 +45,13 @@ export async function handleFullInbox({
         ].includes(action),
         "Неизвестное действие с письмом",
       );
-      if (detail.locations?.length) {
+      const detached = store.mailbox(detail.mailboxId).detached;
+      if (detached)
+        requireValue(
+          ["read", "unread", "star", "unstar"].includes(action),
+          "Почта отключена: действия у провайдера недоступны. История остаётся доступной.",
+        );
+      if (detail.locations?.length && !detached) {
         const remoteAction = ["read", "unread"].includes(action)
           ? { read: action === "read" }
           : ["star", "unstar"].includes(action)
@@ -59,7 +65,7 @@ export async function handleFullInbox({
         for (const moved of result?.moves ||
           (result?.oldFolder ? [result] : []))
           inbox.relocate(detail.id, moved.oldFolder, moved.folder, moved);
-      } else
+      } else if (!detached)
         requireValue(
           ["read", "unread", "star", "unstar"].includes(action),
           "У письма нет доступного расположения у провайдера. Дождитесь синхронизации.",

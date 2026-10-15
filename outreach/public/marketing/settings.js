@@ -36,6 +36,14 @@ export async function settings(root, refresh) {
   for (const section of root.querySelectorAll("[data-sender]")) {
     const id = section.dataset.sender,
       form = section.querySelector("form");
+    if (result.items.find((sender) => sender.id === id)?.detached) {
+      section
+        .querySelectorAll("input, button")
+        .forEach((control) => (control.disabled = true));
+      form.querySelector("[data-error]").textContent =
+        "Почта отключена. Подключите её заново через раздел «Почты».";
+      continue;
+    }
     form.onsubmit = guard(async (event) => {
       event.preventDefault();
       const button = form.querySelector("[type=submit]");

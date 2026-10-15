@@ -21,6 +21,7 @@ const escape = (s) =>
 const icon = (name) =>
   `<span class="ui-icon ui-icon-${name}" aria-hidden="true"></span>`;
 const labels = {
+  detached: "Отключена",
   connected: "Подключён",
   unverified: "Не проверен",
   stopped: "Остановлен",
@@ -88,7 +89,11 @@ async function api(path, data) {
     login();
     throw new Error(out.error);
   }
-  if (!r.ok) throw new Error(out.error || "Ошибка запроса");
+  if (!r.ok)
+    throw Object.assign(new Error(out.error || "Ошибка запроса"), {
+      code: out.code,
+      status: r.status,
+    });
   return out;
 }
 function notice(text) {
@@ -824,7 +829,7 @@ function mailboxes() {
         ? `<div class="mailbox-summary" aria-label="Сводка по почтам"><div><span>Всего ящиков</span><strong>${state.mailboxes.length}</strong></div><div><span>Прогрев включён</span><strong>${warmupRows}</strong></div><div><span>Средний прогрев</span><strong>${averageWarmup}%</strong></div></div><div class="alert warmup-note"><strong>Автопрогрев</strong> рассчитан на 14 активных дней: Dmailio сам плавно увеличивает объём с 2 до 10 писем в день. Процент учитывает активные дни, выполнение плана, успешную отправку и получение писем. Это ориентир готовности, а не гарантия попадания во входящие.</div><section class="mailbox-panel"><div class="mailbox-toolbar"><label class="mailbox-search">Поиск<input id="mailbox-search" type="search" placeholder="Имя или адрес почты"></label><div class="bulk-actions"><span id="selected-count">Ничего не выбрано</span><button id="bulk-start" class="primary" disabled>Включить прогрев</button><button id="bulk-pause" disabled>Поставить на паузу</button></div></div><div class="table-scroll"><table class="mailbox-table"><thead><tr><th class="select-cell"><input id="select-all-mailboxes" type="checkbox" aria-label="Выбрать все почты"></th><th class="switch-cell">Прогрев</th><th>Ящик</th><th class="num">Прогрето</th><th class="num">Отправлено</th><th class="num">Ответы</th><th class="num">Здоровье</th><th>Действия</th></tr></thead><tbody>${state.mailboxes
             .map(
               (m) =>
-                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td class="switch-cell"><label class="switch" title="${!m.verified ? "Сначала проверьте почту" : !m.enabled ? "Ящик отключён" : "Включить или приостановить прогрев"}"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-mailbox-detail="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td class="num"><button class="warmup-score" data-mailbox-detail="${m.id}" aria-label="${escape(m.email)} прогрет на ${m.warmupProgress.score} процентов"><span class="warmup-score-head"><strong>${m.warmupProgress.score}%</strong><b>${escape(m.warmupProgress.label)}</b></span><span class="progress"><span style="width:${m.warmupProgress.score}%"></span></span><small>${m.warmupStatus === "warming" ? `день ${m.warmupProgress.day} из 14 · ${m.currentWarmupLimit} ${mailWord(m.currentWarmupLimit)}/день` : escape(labels[m.warmupStatus] || m.warmupStatus)}</small>${m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td class="num"><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td class="num"><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td class="num"><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-mailbox-detail="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}" class="icon-button">${icon("signature")}Подпись</button><button data-mailbox-settings="${m.id}" class="icon-button">${icon("gear")}Настройки</button><button data-verify="${m.id}" class="icon-button">${icon("circle-check")}${m.verified ? "Перепроверить" : "Проверить"}</button></div></td></tr>`,
+                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td class="switch-cell"><label class="switch" title="${!m.verified ? "Сначала проверьте почту" : !m.enabled ? "Ящик отключён" : "Включить или приостановить прогрев"}"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-mailbox-detail="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td class="num"><button class="warmup-score" data-mailbox-detail="${m.id}" aria-label="${escape(m.email)} прогрет на ${m.warmupProgress.score} процентов"><span class="warmup-score-head"><strong>${m.warmupProgress.score}%</strong><b>${escape(m.warmupProgress.label)}</b></span><span class="progress"><span style="width:${m.warmupProgress.score}%"></span></span><small>${m.warmupStatus === "warming" ? `день ${m.warmupProgress.day} из 14 · ${m.currentWarmupLimit} ${mailWord(m.currentWarmupLimit)}/день` : escape(labels[m.warmupStatus] || m.warmupStatus)}</small>${m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td class="num"><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td class="num"><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td class="num"><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-mailbox-detail="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}" class="icon-button">${icon("signature")}Подпись</button><button data-mailbox-settings="${m.id}" class="icon-button">${icon("gear")}Настройки</button>${m.detached ? `<button data-reconnect-mailbox="${m.id}">Подключить снова</button>` : `<button data-verify="${m.id}" class="icon-button">${icon("circle-check")}${m.verified ? "Перепроверить" : "Проверить"}</button><button data-disconnect-mailbox="${m.id}">Отвязать</button>`}</div></td></tr>`,
             )
             .join("")}</tbody></table></div></section>`
         : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'
@@ -975,6 +980,38 @@ function mailboxes() {
         }
       })),
   );
+  document.querySelectorAll("[data-disconnect-mailbox]").forEach(
+    (b) =>
+      (b.onclick = action(async () => {
+        const m = state.mailboxes.find(
+          (m) => m.id === b.dataset.disconnectMailbox,
+        );
+        if (
+          !confirm(
+            `Отвязать ${m.email}? Прогрев, отправки и синхронизация остановятся, сохранённые пароли будут удалены. Кампании с этим ящиком будут приостановлены. История останется. Сам ящик у провайдера не изменится.`,
+          )
+        )
+          return;
+        b.disabled = true;
+        try {
+          await api(`/mailboxes/${m.id}/disconnect`, {});
+          selectedMailboxes.delete(m.id);
+          await refresh();
+          notice("Почта отвязана. История сохранена.");
+        } finally {
+          b.disabled = false;
+        }
+      })),
+  );
+  document
+    .querySelectorAll("[data-reconnect-mailbox]")
+    .forEach(
+      (b) =>
+        (b.onclick = () =>
+          mailboxDialog(
+            state.mailboxes.find((m) => m.id === b.dataset.reconnectMailbox),
+          )),
+    );
   updateSelection();
 }
 
@@ -1307,7 +1344,7 @@ function mailboxDialog(
   },
 ) {
   dialog(
-    `<h2>${m.id ? "Настройки ящика" : "Подключить почту"}</h2><form id="mailbox-form"><label>Провайдер<select id="provider"><option value="custom">Другой / IMAP + SMTP</option><option value="yandex">Яндекс 360</option><option value="google">Google Workspace</option><option value="vk">VK Workspace</option></select></label><div class="grid"><label>Email<input name="email" type="email" required value="${escape(m.email)}"></label><label>Лимит за 24 часа<input name="limit" type="number" min="1" max="10000" value="${m.limit}" required></label><label>Имя<input name="name" value="${escape(m.name)}"></label><label>Фамилия<input name="surname" value="${escape(m.surname)}"></label></div><p class="hint">Оформление подписи доступно отдельно: «Почты → Подпись».</p>${["smtp", "imap"].map((t) => `<h3>${t.toUpperCase()}</h3><div class="grid"><label>Сервер<input name="${t}Host" required value="${escape(m[t].host)}"></label><label>Порт<input name="${t}Port" type="number" required value="${m[t].port}"></label><label>Логин<input name="${t}User" value="${escape(m[t].user)}" placeholder="По умолчанию email"></label><label>Пароль приложения<input name="${t}Password" type="password" autocomplete="new-password" ${m.id ? "" : "required"} placeholder="${m.id ? "Пусто — сохранить текущий" : ""}"></label></div><label class="check"><input name="${t}Secure" type="checkbox" ${m[t].secure ? "checked" : ""}>TLS сразу при подключении (без галочки — обязательный STARTTLS)</label>`).join("")}<p class="hint">Пресет заполняет серверы. Пароль приложения и доступ IMAP нужно включить у провайдера. OAuth пока не поддерживается.</p><div class="actions"><button class="primary">Сохранить подключение</button></div></form>`,
+    `<h2>${m.detached ? "Подключить почту заново" : m.id ? "Настройки ящика" : "Подключить почту"}</h2><form id="mailbox-form"><label>Провайдер<select id="provider"><option value="custom">Другой / IMAP + SMTP</option><option value="yandex">Яндекс 360</option><option value="google">Google Workspace</option><option value="vk">VK Workspace</option></select></label><div class="grid"><label>Email<input name="email" type="email" required ${m.detached ? "readonly" : ""} value="${escape(m.email)}"></label><label>Лимит за 24 часа<input name="limit" type="number" min="1" max="10000" value="${m.limit}" required></label><label>Имя<input name="name" value="${escape(m.name)}"></label><label>Фамилия<input name="surname" value="${escape(m.surname)}"></label></div><p class="hint">Оформление подписи доступно отдельно: «Почты → Подпись».</p>${["smtp", "imap"].map((t) => `<h3>${t.toUpperCase()}</h3><div class="grid"><label>Сервер<input name="${t}Host" required value="${escape(m[t].host)}"></label><label>Порт<input name="${t}Port" type="number" required value="${m[t].port}"></label><label>Логин<input name="${t}User" value="${escape(m[t].user)}" placeholder="По умолчанию email"></label><label>Пароль приложения<input name="${t}Password" type="password" autocomplete="new-password" ${m.id && !m.detached ? "" : "required"} placeholder="${m.id && !m.detached ? "Пусто — сохранить текущий" : ""}"></label></div><label class="check"><input name="${t}Secure" type="checkbox" ${m[t].secure ? "checked" : ""}>TLS сразу при подключении (без галочки — обязательный STARTTLS)</label>`).join("")}<p class="hint">Пресет заполняет серверы. Пароль приложения и доступ IMAP нужно включить у провайдера. OAuth пока не поддерживается.</p><div class="actions"><button class="primary">Сохранить подключение</button></div></form>`,
   );
   document.querySelector("#provider").onchange = (e) => {
     const presets = {

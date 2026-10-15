@@ -268,6 +268,12 @@ export function createApp({
         return send(store.mailboxOverview());
       if (path === "/api/mailboxes" && method === "POST")
         return send(store.saveMailbox(data), 201);
+      const disconnect = path.match(/^\/api\/mailboxes\/([^/]+)\/disconnect$/);
+      if (disconnect && method === "POST") {
+        const mailbox = store.disconnectMailbox(disconnect[1]);
+        gateway.closeMailboxClients?.(mailbox.id);
+        return send(mailbox);
+      }
       if (path === "/api/mailboxes/warmup/bulk" && method === "POST") {
         store.bulkWarmup(data.ids, data.enabled);
         return send(store.mailboxOverview());
@@ -338,17 +344,20 @@ export function createApp({
           return send(store.saveSignature(mailbox[1], data));
         if (mailbox[2] === "warmup")
           return send(store.warmup(mailbox[1], data));
+        const snapshot = store.mailbox(mailbox[1], true);
         try {
-          const cursor = await gateway.verify(store.mailbox(mailbox[1], true));
-          store.markMailbox(mailbox[1], true);
+          const cursor = await gateway.verify(snapshot);
+          store.markMailbox(mailbox[1], true, "", snapshot.connectionRevision);
           const m = store.mailbox(mailbox[1], true);
-          if (!m.cursor.validity && !m.cursor.since) store.synced(m.id, cursor);
+          if (!m.cursor.validity && !m.cursor.since)
+            store.synced(m.id, cursor, Date.now(), snapshot.connectionRevision);
           return send(store.mailbox(mailbox[1]));
         } catch {
           store.markMailbox(
             mailbox[1],
             false,
             "Проверка SMTP/IMAP не пройдена. Проверьте host, порт и пароль приложения.",
+            snapshot.connectionRevision,
           );
           return send({ error: "Проверка SMTP/IMAP не пройдена" }, 400);
         }
@@ -561,13 +570,14 @@ export function createApp({
       if (!res.headersSent)
         send(
           {
+            ...(e.code === "MAILBOX_BUSY" ? { code: e.code } : {}),
             error: e.code?.includes("SQLITE")
               ? "Не удалось сохранить: проверьте уникальность и связанные данные"
               : e instanceof SyntaxError
                 ? "Некорректный JSON"
                 : e.message || "Ошибка запроса",
           },
-          400,
+          e.status === 409 ? 409 : 400,
         );
     }
   });
