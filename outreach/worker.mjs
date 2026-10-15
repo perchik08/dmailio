@@ -54,7 +54,7 @@ export class Worker {
             this.store.mailbox(m.id, true),
             (incoming) => this.store.ingestAll(m.id, incoming),
           );
-          this.store.synced(m.id, cursor);
+          this.store.synced(m.id, cursor, Date.now(), m.connectionRevision);
           try {
             const known = this.store.pendingPlacementMessageIds(m.id);
             if (known.size && this.gateway.inspectWarmupPlacement)
@@ -71,7 +71,7 @@ export class Worker {
           }
           if (cursor.caughtUp !== false) healthy.add(m.id);
         } catch {
-          this.store.syncError(m.id);
+          this.store.syncError(m.id, m.connectionRevision);
         }
       }
       for (let i = 0; i < 25; i++) {

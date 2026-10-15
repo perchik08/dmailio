@@ -201,7 +201,20 @@ export async function mountFullInbox({
     const m = await api(`/mailbox/messages/${encodeURIComponent(id)}`);
     if (version !== detailVersion) return;
     const outgoing = m.direction === "out";
+    const detached = mailboxes.find((b) => b.id === m.mailboxId)?.detached;
     detail.innerHTML = `<article class="panel"><h2>${e(m.subject || "Без темы")}</h2><p><strong>От:</strong> ${e(m.from || m.mailboxEmail || "")}<br><strong>Кому:</strong> ${e((m.to || []).join(", "))}${m.cc?.length ? `<br><strong>Копия:</strong> ${e(m.cc.join(", "))}` : ""}</p><p class="hint">${e(date(m.created))} · ${e(m.mailboxEmail || "")} · ${e((m.folders || []).join(", "))}${m.status ? ` · ${e(label[m.status] || m.status)}` : ""}</p>${m.status === "unknown" ? '<div class="alert">Результат SMTP неизвестен. Проверьте отправку у почтового провайдера. Автоматического повтора нет.</div>' : ""}${m.sentCopyError ? `<div class="alert">Письмо отправлено, но копия в папке отправленных не сохранена: ${e(m.sentCopyError)}</div>` : ""}<div class="actions"><button data-mail-action="${m.read ? "unread" : "read"}">${m.read ? "Не прочитано" : "Прочитано"}</button><button data-mail-action="${m.starred ? "unstar" : "star"}">${m.starred ? "Убрать звезду" : "Отметить звездой"}</button>${!outgoing ? '<button data-mail-action="archive">В архив</button><button data-mail-action="spam">В спам</button><button data-mail-action="trash">В корзину</button>' : ""}</div><div data-body></div><div class="actions">${(m.attachments || []).map((a) => `<a href="/api/mailbox/attachments/${encodeURIComponent(a.id)}" download="${e(a.name)}">${e(a.name)} (${Math.ceil(a.size / 1024)} КБ)</a>`).join(" ")}</div><div class="actions"><button data-reply>Ответить</button><button data-reply-all>Ответить всем</button><button data-forward>Переслать</button></div></article>`;
+    if (detached) {
+      detail
+        .querySelectorAll(
+          '[data-reply], [data-reply-all], [data-mail-action="archive"], [data-mail-action="spam"], [data-mail-action="trash"]',
+        )
+        .forEach((b) => (b.disabled = true));
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent =
+        "Почта отключена. История доступна, действия у провайдера остановлены.";
+      detail.querySelector("article").prepend(hint);
+    }
     const body = detail.querySelector("[data-body]");
     if (m.deliveryWarning) {
       const warning = document.createElement("div");
@@ -300,7 +313,7 @@ export async function mountFullInbox({
       locked: false,
     };
     const host = find("[data-compose]");
-    host.innerHTML = `<form class="panel full-mail-compose"><h2>${initial.draftId ? "Черновик" : "Новое письмо"}</h2><label>Отправитель<select name="mailboxId" required>${opts([["", "Выберите ящик"], ...mailboxes.map((m) => [m.id, m.email])], compose.mailboxId)}</select></label>${["to", "cc", "bcc"].map((name) => `<label>${{ to: "Кому", cc: "Копия", bcc: "Скрытая копия" }[name]}<input name="${name}" value="${e((Array.isArray(compose[name]) ? compose[name] : parseRecipients(compose[name])).join(", "))}" ${name === "to" ? "required" : ""} placeholder="email@example.com, второй адрес"></label>`).join("")}<label>Тема<input name="subject" value="${e(compose.subject)}" maxlength="998"></label><label>Формат<select name="format">${opts(
+    host.innerHTML = `<form class="panel full-mail-compose"><h2>${initial.draftId ? "Черновик" : "Новое письмо"}</h2><label>Отправитель<select name="mailboxId" required>${opts([["", "Выберите ящик"], ...mailboxes.filter((m) => !m.detached && m.enabled).map((m) => [m.id, m.email])], compose.mailboxId)}</select></label>${["to", "cc", "bcc"].map((name) => `<label>${{ to: "Кому", cc: "Копия", bcc: "Скрытая копия" }[name]}<input name="${name}" value="${e((Array.isArray(compose[name]) ? compose[name] : parseRecipients(compose[name])).join(", "))}" ${name === "to" ? "required" : ""} placeholder="email@example.com, второй адрес"></label>`).join("")}<label>Тема<input name="subject" value="${e(compose.subject)}" maxlength="998"></label><label>Формат<select name="format">${opts(
       [
         ["plain", "Обычный текст"],
         ["markdown", "Markdown"],
