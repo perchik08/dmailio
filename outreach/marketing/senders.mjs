@@ -27,6 +27,7 @@ export class Senders {
       replyTo: p.replyTo,
       enabled: m.enabled,
       verified: m.verified,
+      detached: m.detached,
       marketingEnabled: p.enabled,
       eligible: Boolean(
         m.enabled && m.verified && !m.error && p.enabled && !p.blocked,
@@ -54,7 +55,12 @@ export class Senders {
   }
   update(id, value) {
     identifier(id);
-    this.get(id);
+    if (this.get(id).detached)
+      throw new MarketingError(
+        "SENDER_UNAVAILABLE",
+        "Почта отключена. Сначала подключите её заново в разделе «Почты».",
+        409,
+      );
     const allowed = [
       "enabled",
       "fromName",
@@ -129,16 +135,21 @@ export class Senders {
   }
   async check(id) {
     identifier(id);
+    this.store.assertMailboxConnection(this.store.mailbox(id));
+    const m = this.store.mailbox(id, true);
     try {
-      const m = this.store.mailbox(id, true);
       const cursor = await this.gateway.verify(m);
-      this.store.markMailbox(id, true);
+      this.store.markMailbox(id, true, "", m.connectionRevision);
       if (!m.cursor?.validity && !m.cursor?.since && cursor)
-        this.store.synced(id, cursor);
-      this.store.dispatch.checked(id);
+        this.store.synced(id, cursor, Date.now(), m.connectionRevision);
       return this.get(id);
     } catch {
-      this.store.markMailbox(id, false, "Проверка SMTP/IMAP не пройдена");
+      this.store.markMailbox(
+        id,
+        false,
+        "Проверка SMTP/IMAP не пройдена",
+        m.connectionRevision,
+      );
       throw new MarketingError(
         "CONNECTION_FAILED",
         "Не удалось проверить SMTP/IMAP. Настройки доступны в разделе «Почты».",

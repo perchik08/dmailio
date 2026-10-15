@@ -39,19 +39,83 @@ export class MailGateway {
   constructor(store, publicURL) {
     this.store = store;
     this.publicURL = publicURL.replace(/\/$/, "");
+    this.connectionClients = new Map();
+    for (const name of [
+      "verify",
+      "send",
+      "sendMarketing",
+      "sync",
+      "inspectWarmupPlacement",
+      "updateFullMessage",
+    ]) {
+      const original = this[name].bind(this);
+      this[name] = async (m, ...args) => {
+        if (!m.id || !this.store.beginMailboxIO) return original(m, ...args);
+        const token = this.store.beginMailboxIO(m);
+        let lost = false;
+        const heartbeat = setInterval(() => {
+          try {
+            if (!this.store.touchMailboxIO(token)) {
+              lost = true;
+              this.closeMailboxClients(m.id);
+            }
+          } catch {
+            lost = true;
+            this.closeMailboxClients(m.id);
+          }
+        }, 15000);
+        heartbeat.unref();
+        try {
+          const result = await original(m, ...args);
+          try {
+            this.store.assertMailboxConnection(m);
+            if (lost) throw new Error("Connection lease lost");
+          } catch (error) {
+            error.definitive = false;
+            throw error;
+          }
+          return result;
+        } finally {
+          clearInterval(heartbeat);
+          this.store.endMailboxIO(token);
+        }
+      };
+    }
+  }
+  trackClient(m, client) {
+    if (!m.id) return client;
+    const clients = this.connectionClients.get(m.id) || new Set();
+    clients.add(client);
+    this.connectionClients.set(m.id, clients);
+    const close = client.close.bind(client);
+    client.close = (...args) => {
+      clients.delete(client);
+      if (!clients.size) this.connectionClients.delete(m.id);
+      return close(...args);
+    };
+    return client;
+  }
+  closeMailboxClients(id) {
+    for (const client of [...(this.connectionClients.get(id) || [])])
+      try {
+        client.close();
+      } catch {}
   }
   transport(m) {
-    return nodemailer.createTransport({
-      ...m.smtp,
-      auth: { user: m.smtp.user, pass: m.smtp.password },
-      requireTLS: !m.smtp.secure,
-      tls: { rejectUnauthorized: true, minVersion: "TLSv1.2" },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 30000,
-      logger: false,
-      debug: false,
-    });
+    return this.trackClient(
+      m,
+      nodemailer.createTransport({
+        ...m.smtp,
+        auth: { user: m.smtp.user, pass: m.smtp.password },
+        requireTLS: !m.smtp.secure,
+        tls: { rejectUnauthorized: true, minVersion: "TLSv1.2" },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 30000,
+        logger: false,
+        debug: false,
+      }),
+    );
   }
   imap(m) {
     const c = new ImapFlow({
@@ -66,7 +130,7 @@ export class MailGateway {
       disableAutoIdle: true,
     });
     c.on("error", () => {});
-    return c;
+    return this.trackClient(m, c);
   }
   async verify(m) {
     const smtp = this.transport(m);
