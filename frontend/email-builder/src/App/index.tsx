@@ -1,5 +1,5 @@
 import { Stack, useTheme } from '@mui/material';
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import { TEditorConfiguration } from '../documents/editor/core';
 import { setDocument, subscribeDocument, useInspectorDrawerOpen, useSamplesDrawerOpen } from '../documents/editor/EditorContext';
@@ -38,20 +38,15 @@ export default function App(props: AppProps) {
   const marginLeftTransition = useDrawerTransition('margin-left', samplesDrawerOpen);
   const marginRightTransition = useDrawerTransition('margin-right', inspectorDrawerOpen);
 
-  if (props.data) {
-    setDocument(props.data)
-  } else {
-    setDocument(DEFAULT_SOURCE)
-  }
-
-  if (props.onChange) {
-    subscribeDocument ((document) => {
+  useEffect(() => {setDocument(props.data || DEFAULT_SOURCE);},[props.data]);
+  useEffect(() => {
+    return subscribeDocument ((document) => {
       props.onChange?.(
         document,
         renderHtmlWithMeta(document, { rootBlockId: 'root', outlook: Boolean(document.root?.data?.outlook) })
       )
-    })
-  }
+    });
+  },[props.onChange]);
 
   return (
     <>

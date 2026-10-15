@@ -3,6 +3,12 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { escapeHTML } from "./core.mjs";
 import { renderContent } from "./content.mjs";
+import {
+  initializeFullInbox,
+  syncFullInbox,
+  updateFullMessage,
+  sendFullMessage,
+} from "./full-inbox-sync.mjs";
 
 export function classify(parsed) {
   const ct = String(
@@ -72,6 +78,7 @@ export class MailGateway {
     const imap = this.imap(m);
     try {
       await imap.connect();
+      if (m.id) return await initializeFullInbox(imap);
       await imap.mailboxOpen("INBOX");
       return {
         validity: String(imap.mailbox.uidValidity),
@@ -82,7 +89,11 @@ export class MailGateway {
       imap.close();
     }
   }
+  async updateFullMessage(m, locations, action) {
+    return updateFullMessage(this, m, locations, action);
+  }
   async send(m, message) {
+    if (message.kind === "mail") return sendFullMessage(this, m, message);
     const unsubscribe = `${this.publicURL}/unsubscribe/${message.token}`;
     const formatted = renderContent(
       message,
@@ -147,7 +158,57 @@ export class MailGateway {
       transport.close();
     }
   }
+  async sendMarketing(m, message) {
+    const transport = this.transport(m);
+    try {
+      const headers = {};
+      if (message.unsubscribeUrl) {
+        const url = new URL(message.unsubscribeUrl);
+        if (url.protocol !== "https:" || url.username || url.password)
+          throw Object.assign(new Error("Invalid unsubscribe URL"), {
+            definitive: true,
+          });
+        headers["List-Unsubscribe"] = `<${url.href}>`;
+        headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+      }
+      const result = await transport.sendMail({
+        from: { name: message.fromName, address: m.email },
+        to: message.recipient,
+        replyTo: message.replyTo || m.email,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+        messageId: message.messageId,
+        headers,
+        disableFileAccess: true,
+        disableUrlAccess: true,
+      });
+      if (
+        !result.accepted?.some(
+          (address) =>
+            String(address).toLowerCase() === message.recipient.toLowerCase(),
+        )
+      )
+        throw Object.assign(new Error("SMTP rejected recipient"), {
+          definitive: true,
+        });
+      return {
+        messageId: result.messageId || message.messageId,
+        accepted: result.accepted,
+      };
+    } catch (error) {
+      if (
+        ["EAUTH", "EENVELOPE"].includes(error.code) ||
+        Number(error.responseCode) >= 400
+      )
+        error.definitive = true;
+      throw error;
+    } finally {
+      transport.close();
+    }
+  }
   async sync(m, onMessage) {
+    if (m.id) return syncFullInbox(this, m, onMessage);
     const c = this.imap(m);
     try {
       await c.connect();

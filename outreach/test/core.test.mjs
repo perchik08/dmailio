@@ -1,6 +1,110 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as core from "../core.mjs";
+test("phrase rotation chooses groups independently and expands nested contact templates", () => {
+  const picks = [1, 0];
+  assert.equal(
+    core.render(
+      "{{letter}}",
+      {
+        letter: "{{name}}, { привет | здравствуйте }! {Первое|Второе}",
+        name: "Иван",
+      },
+      {},
+      new Set(),
+      { choose: () => picks.shift() },
+    ),
+    "Иван, здравствуйте! Первое",
+  );
+  assert.equal(
+    core.render("{обычный текст} и {{name}}", { name: "Иван" }),
+    "{обычный текст} и Иван",
+  );
+  for (const literal of [
+    "{",
+    "{{",
+    "{текст",
+    "{a{b}",
+    "Текст | текст",
+    "{a: 1}",
+  ])
+    assert.equal(core.render(literal), literal);
+});
+test("rotation validates every alternative before choosing and rejects broken groups", () => {
+  for (const body of ["{a|}", "{|b}", "{a|b", "{a|{b|c}}", "{a|{{missing}}}"])
+    assert.throws(() =>
+      core.render(body, {}, {}, new Set(), { choose: () => 0 }),
+    );
+  assert.throws(
+    () => core.render("{ok|{{loop}}}", { loop: "{{loop}}" }),
+    /цикл/,
+  );
+  assert.equal(
+    core.render("{a|{{name}}}", { name: "Иван" }, {}, new Set(), {
+      choose: () => 1,
+    }),
+    "Иван",
+  );
+});
+test("only selected alternatives count as inserted sender signatures", () => {
+  const used = new Set();
+  assert.equal(
+    core.render(
+      "{{{Подпись Отправителя}}|Привет}",
+      {},
+      { signature: "Подпись" },
+      used,
+      { choose: () => 1 },
+    ),
+    "Привет",
+  );
+  assert.equal(used.has("Подпись Отправителя"), false);
+});
+test("validation visits every branch without consuming random choices", () => {
+  assert.equal(
+    core.render("{коротко|намного длиннее}", {}, {}, new Set(), {
+      validateOnly: true,
+      choose: () => {
+        throw new Error("random during validation");
+      },
+    }),
+    "намного длиннее",
+  );
+  assert.throws(
+    () => core.render("{ok|{{blank}}}", { blank: " " }),
+    /переменная/,
+  );
+});
+test("rotation preserves rich editor emphasis spanning alternatives", () => {
+  for (const [choice, expected] of [
+    [0, "<p><strong>Hello</strong></p>"],
+    [1, "<p><strong>Goodbye</strong></p>"],
+  ])
+    assert.equal(
+      core.render(
+        "<p>{<strong>Hello|Goodbye</strong>}</p>",
+        {},
+        {},
+        new Set(),
+        { choose: () => choice, html: true },
+      ),
+      expected,
+    );
+  assert.equal(core.render("{".repeat(100)), "{".repeat(100));
+});
+test("rich rotation bounds formatting depth and generated alternatives", () => {
+  assert.throws(
+    () =>
+      core.render(
+        "{" + "<b>".repeat(100) + "a|b" + "</b>".repeat(100) + "}",
+        {},
+        {},
+        new Set(),
+        { html: true },
+      ),
+    /Ротация/,
+  );
+});
 test("addresses reject display names, comments and multiple recipients", () => {
   for (const value of [
     "a(comment)@example.com",

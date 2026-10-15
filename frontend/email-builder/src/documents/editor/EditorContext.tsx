@@ -33,7 +33,7 @@ export function useDocument() {
 }
 
 export function subscribeDocument (listener: (selectedState: TEditorConfiguration, previousSelectedState: TEditorConfiguration) => void) {
-  editorStateStore.subscribe((state) => state.document, listener)
+  return editorStateStore.subscribe((state) => state.document, listener)
 }
 
 export function useSelectedBlockId() {

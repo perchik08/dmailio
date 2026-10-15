@@ -27,6 +27,7 @@ export class Worker {
       );
       this.store.finish(message.id, "sent");
     } catch (e) {
+      this.store.dispatch.fail(message.mailbox_id, e);
       this.store.finish(
         message.id,
         e.definitive ? "failed" : "unknown",
@@ -51,7 +52,7 @@ export class Worker {
         try {
           const cursor = await this.gateway.sync(
             this.store.mailbox(m.id, true),
-            (incoming) => this.store.ingest(m.id, incoming),
+            (incoming) => this.store.ingestAll(m.id, incoming),
           );
           this.store.synced(m.id, cursor);
           try {

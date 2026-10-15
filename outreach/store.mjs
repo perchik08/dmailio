@@ -1,5 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { queryLeads } from "./leads.mjs";
+import { Dispatch } from "./dispatch.mjs";
+import { FullInboxStore } from "./full-inbox-store.mjs";
 import { contentFormat, renderContent, validateImage } from "./content.mjs";
 import {
   randomUUID,
@@ -110,11 +112,14 @@ export class Store {
       this.db.exec(
         "ALTER TABLE leads ADD COLUMN preparation_error TEXT NOT NULL DEFAULT ''",
       );
+    this.fullInbox = new FullInboxStore(this);
+    this.dispatch = new Dispatch(this);
   }
   close() {
     this.db.close();
   }
   transaction(fn) {
+    if (this.db.isTransaction) return fn();
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const out = fn();
@@ -319,6 +324,7 @@ export class Store {
     this.db
       .prepare("UPDATE mailboxes SET verified=?,error=? WHERE id=?")
       .run(ok ? 1 : 0, error, id);
+    if (ok && this.dispatch) this.dispatch.checked(id);
   }
   synced(id, cursor, now = Date.now()) {
     this.db
@@ -701,42 +707,72 @@ export class Store {
     requireValue(l, "Загрузите контакты");
     return this.compose(c, l, this.mailbox(mailboxId || c.mailboxIds[0]), step);
   }
-  compose(c, l, m, step) {
+  compose(c, l, m, step, validateOnly = false) {
     requireValue(c.steps[step], "Шаг не найден");
     let subject = "";
     for (let n = 0; n <= step; n++)
-      if (c.steps[n].subject) subject = render(c.steps[n].subject, l.fields, m);
+      if (c.steps[n].subject)
+        subject = render(c.steps[n].subject, l.fields, m, new Set(), {
+          validateOnly,
+          check: (value) =>
+            requireValue(
+              !/[\r\n]/.test(value) && value.length <= 998,
+              "Тема после подстановки некорректна",
+            ),
+        });
     requireValue(
       !/[\r\n]/.test(subject) && subject.length <= 998,
       "Тема после подстановки некорректна",
     );
     const used = new Set();
-    const text = render(c.steps[step].body, l.fields, m, used);
-    const signature =
-      c.steps[step].includeSignature !== false &&
-      m.signatureEnabled !== false &&
-      !used.has("Подпись Отправителя")
-        ? render(m.signature || "", l.fields, m)
+    const format = contentFormat(c.steps[step].format);
+    const marker =
+      format === "plain" && m.signatureFormat === "markdown"
+        ? randomUUID()
         : "";
+    if (marker)
+      render(c.steps[step].body, l.fields, m, new Set(), {
+        validateOnly: true,
+        html: format === "markdown",
+      });
+    // Render once: replacing an inline rich signature must not reroll phrases.
+    const body = render(
+      c.steps[step].body,
+      l.fields,
+      marker ? { ...m, signature: marker } : m,
+      used,
+      {
+        validateOnly,
+        html: format === "markdown",
+        check: (value) => {
+          if (format === "markdown") this.rendered({ body: value, format });
+        },
+      },
+    );
+    const inlineSignature = marker && used.has("Подпись Отправителя");
+    const signature =
+      inlineSignature ||
+      (c.steps[step].includeSignature !== false &&
+        m.signatureEnabled !== false &&
+        !used.has("Подпись Отправителя"))
+        ? render(m.signature || "", l.fields, m, new Set(), {
+            validateOnly,
+            html: m.signatureFormat === "markdown",
+            check: (value) => {
+              if (m.signatureFormat === "markdown")
+                this.rendered({ body: value, format: "markdown" });
+            },
+          })
+        : "";
+    const text = inlineSignature ? body.replaceAll(marker, signature) : body;
     const content = {
-      body: text,
-      format: contentFormat(c.steps[step].format),
+      body,
+      format,
       signature,
       signature_format: m.signatureFormat || "plain",
     };
     // Preserve a rich signature inserted into a legacy plain-text CSV template.
-    if (
-      content.format === "plain" &&
-      m.signatureFormat === "markdown" &&
-      used.has("Подпись Отправителя")
-    ) {
-      content.signature_marker = randomUUID();
-      content.signature = render(m.signature || "", l.fields, m);
-      content.body = render(c.steps[step].body, l.fields, {
-        ...m,
-        signature: content.signature_marker,
-      });
-    }
+    if (inlineSignature) content.signature_marker = marker;
     const formatted = this.rendered(content);
     return {
       subject,
@@ -774,22 +810,17 @@ export class Store {
           "Проверьте подключения всех ящиков",
         );
         for (const l of c.leads)
-          for (let i = 0; i < c.steps.length; i++) this.compose(c, l, m, i);
+          for (let i = 0; i < c.steps.length; i++)
+            this.compose(c, l, m, i, true);
       }
     }
     this.db.prepare("UPDATE campaigns SET status=? WHERE id=?").run(status, id);
     return this.campaign(id);
   }
   available(mid, now, interval = 1) {
-    const m = this.mailbox(mid);
-    if (!m.enabled || !m.verified) return false;
-    const n = this.db
-      .prepare(
-        "SELECT count(*) n,max(created) last FROM messages WHERE mailbox_id=? AND direction='out' AND status IN ('sending','sent','unknown') AND created>?",
-      )
-      .get(mid, now - 86400000);
-    return n.n < m.limit && (!n.last || now - n.last >= interval * 60000);
+    return this.dispatch.budget(mid, now, interval).available;
   }
+
   reserve(now, healthy) {
     return this.transaction(() => {
       const rows = this.db
@@ -862,7 +893,10 @@ export class Store {
             step: l.step,
             kind: "campaign",
             recipient: l.email,
-            subject: p.subject,
+            subject:
+              !c.steps[l.step].subject && previous
+                ? previous.subject
+                : p.subject,
             body: p.body,
             signature_marker: p.signature_marker,
             format: p.format,
@@ -1074,6 +1108,18 @@ export class Store {
       )
       .run(now - 600000);
   }
+  ingestAll(mid, inbound, now = Date.now()) {
+    if (!Number.isSafeInteger(inbound.uid) || inbound.uid <= 0)
+      return this.ingest(mid, inbound, now);
+    return this.transaction(() => {
+      const captured = this.fullInbox.capture(mid, inbound, now);
+      if (captured.fresh) {
+        const related = this.ingest(mid, inbound, now);
+        if (related) this.fullInbox.annotate(captured.id, related);
+      }
+      return captured;
+    });
+  }
   ingest(mid, inbound, now = Date.now()) {
     return this.transaction(() => {
       if (
@@ -1273,7 +1319,7 @@ export class Store {
   analytics(campaign = "", since = 0) {
     const rows = this.db
       .prepare(
-        "SELECT m.*,l.email FROM messages m LEFT JOIN leads l ON l.id=m.lead_id WHERE kind!='warmup' AND (?='' OR m.campaign_id=?) AND m.created>=? ORDER BY m.created DESC",
+        "SELECT m.*,l.email FROM messages m LEFT JOIN leads l ON l.id=m.lead_id WHERE kind NOT IN ('warmup','marketing','marketing_test') AND (?='' OR m.campaign_id=?) AND m.created>=? ORDER BY m.created DESC",
       )
       .all(campaign, campaign, since);
     const sent = rows.filter(

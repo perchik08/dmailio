@@ -1,7 +1,7 @@
 import React, { Fragment } from 'react';
 
 import { TEditorBlock } from '../../../editor/core';
-import EditorBlock from '../../../editor/EditorBlock';
+import EditorBlock, {useCurrentBlockId} from '../../../editor/EditorBlock';
 
 import AddBlockButton from './AddBlockMenu';
 
@@ -17,9 +17,11 @@ function generateId() {
 
 export type EditorChildrenIdsProps = {
   childrenIds: string[] | null | undefined;
+  columnIndex?: number;
   onChange: (val: EditorChildrenChange) => void;
 };
-export default function EditorChildrenIds({ childrenIds, onChange }: EditorChildrenIdsProps) {
+export default function EditorChildrenIds({ childrenIds, onChange, columnIndex }: EditorChildrenIdsProps) {
+  const parentId = useCurrentBlockId();
   const appendBlock = (block: TEditorBlock) => {
     const blockId = generateId();
     return onChange({
@@ -41,18 +43,18 @@ export default function EditorChildrenIds({ childrenIds, onChange }: EditorChild
   };
 
   if (!childrenIds || childrenIds.length === 0) {
-    return <AddBlockButton placeholder onSelect={appendBlock} />;
+    return <div data-builder-parent={parentId} data-builder-column={columnIndex}><AddBlockButton placeholder onSelect={appendBlock} /></div>;
   }
 
   return (
-    <>
+    <div data-builder-parent={parentId} data-builder-column={columnIndex}>
       {childrenIds.map((childId, i) => (
         <Fragment key={childId}>
           <AddBlockButton onSelect={(block) => insertBlock(block, i)} />
-          <EditorBlock id={childId} />
+          <div data-builder-index={i}><EditorBlock id={childId} /></div>
         </Fragment>
       ))}
       <AddBlockButton onSelect={appendBlock} />
-    </>
+    </div>
   );
 }

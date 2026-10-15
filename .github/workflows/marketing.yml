@@ -1,0 +1,51 @@
+name: Marketing checks
+on:
+  pull_request:
+    branches: [Unisender, test]
+    paths: ['outreach/**', 'frontend/email-builder/**', 'deploy/**', '.github/workflows/marketing.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  marketing:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: marketing_test
+          POSTGRES_PASSWORD: fixture-password-only
+          POSTGRES_DB: marketing_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U marketing_test -d marketing_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    defaults:
+      run:
+        working-directory: outreach
+    env:
+      MARKETING_TEST_DATABASE_URL: postgres://marketing_test:fixture-password-only@127.0.0.1:5432/marketing_test
+      LISTMONK_TEST_URL: http://127.0.0.1:19000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: outreach/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run build:marketing:builder
+      - run: npm test
+      - run: npm run format:check
+      - run: npm run format:check:marketing
+      - run: npm run test:marketing:unit
+      - run: node test/fixtures/listmonk.mjs
+      - run: npm run test:marketing:integration
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:marketing:e2e
+      - run: docker build -t dmailio-marketing:ci .
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: marketing-browser-report
+          path: outreach/test-results/

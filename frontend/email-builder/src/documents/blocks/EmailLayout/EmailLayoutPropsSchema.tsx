@@ -30,6 +30,7 @@ const EmailLayoutPropsSchema = z.object({
   fontFamily: FONT_FAMILY_SCHEMA,
   childrenIds: z.array(z.string()).optional().nullable(),
   outlook: z.boolean().optional().nullable(),
+  width: z.number().min(320).max(1000).optional(),
 });
 
 export default EmailLayoutPropsSchema;
