@@ -606,7 +606,7 @@ export class Store {
     );
     const steps = input.steps.map((s, i) => {
       requireValue(
-        typeof s.body === "string" && s.body.trim() && s.body.length <= 100000,
+        typeof s.body === "string" && s.body.length <= 100000,
         "Заполните текст письма",
       );
       requireValue(
@@ -619,7 +619,6 @@ export class Store {
         Number.isInteger(s.delay) && s.delay >= 0 && s.delay <= 365,
         "Задержка: 0–365 дней",
       );
-      requireValue(i > 0 || s.subject.trim(), "Нужна тема первого письма");
       return {
         subject: s.subject,
         body: s.body,
