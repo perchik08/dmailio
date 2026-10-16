@@ -96,10 +96,18 @@ async function api(path, data) {
     });
   return out;
 }
-function notice(text) {
-  document.querySelector("#notice").textContent = text;
-  setTimeout(() => {
-    document.querySelector("#notice").textContent = "";
+let noticeTimer;
+const campaignActionsPending = new Set();
+function notice(text, kind = "info") {
+  const el = document.querySelector("#notice");
+  clearTimeout(noticeTimer);
+  el.dataset.kind = kind;
+  el.setAttribute("role", kind === "error" ? "alert" : "status");
+  el.setAttribute("aria-live", kind === "error" ? "assertive" : "polite");
+  el.setAttribute("aria-atomic", "true");
+  el.textContent = text;
+  noticeTimer = setTimeout(() => {
+    el.textContent = "";
   }, 6000);
 }
 function action(fn) {
@@ -107,7 +115,7 @@ function action(fn) {
     try {
       await fn(e);
     } catch (err) {
-      notice(err.message);
+      notice(err.message, "error");
     }
   };
 }
@@ -286,6 +294,7 @@ function campaigns() {
       parsed = null;
       importSession = null;
       renderCampaign();
+      notice("Черновик кампании создан", "success");
     } catch (error) {
       button.disabled = false;
       throw error;
@@ -341,7 +350,7 @@ async function saveCampaign() {
   readEditor();
   current = await api("/campaigns", current);
   state = await api("/state");
-  notice("Кампания сохранена");
+  notice("Кампания сохранена", "success");
   renderCampaign();
 }
 function bindCampaignTitle() {
@@ -606,16 +615,17 @@ function wireImportWizard() {
       parsed = null;
       current = await api(`/campaigns/${current.id}`);
       state = await api("/state");
-      notice(`Импортировано контактов: ${result.added}`);
+      notice(`Импортировано контактов: ${result.added}`, "success");
       renderCampaign();
     }),
   );
 }
 
 function renderCampaign() {
-  const editable = current.status === "draft";
+  const busy = campaignActionsPending.has(current.id);
+  const editable = current.status === "draft" && !busy;
   shell(
-    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${badge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" ? "disabled" : ""}>${current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div><div class="tabs">${[
+    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${badge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" || busy ? "disabled" : ""} aria-busy="${busy}">${busy ? (current.status === "active" ? "Приостанавливаем…" : current.status === "paused" ? "Возобновляем…" : "Запускаем…") : current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div><div class="tabs">${[
       ["leads", "1. Лиды"],
       ["sequence", "2. Цепочка"],
       ["settings", "3. Настройки"],
@@ -634,8 +644,10 @@ function renderCampaign() {
   });
   click("save", saveCampaign);
   click("toggle", async () => {
-    const status = current.status === "active" ? "paused" : "active";
-    if (status === "active" && current.status === "draft") await saveCampaign();
+    const target = current;
+    if (campaignActionsPending.has(target.id)) return;
+    const previousStatus = target.status;
+    const status = previousStatus === "active" ? "paused" : "active";
     if (
       status === "active" &&
       !confirm(
@@ -643,8 +655,30 @@ function renderCampaign() {
       )
     )
       return;
-    current = await api("/campaigns/" + current.id + "/status", { status });
+    readEditor();
+    campaignActionsPending.add(target.id);
     renderCampaign();
+    try {
+      if (previousStatus === "draft") await api("/campaigns", target);
+      const result = await api(`/campaigns/${target.id}/status`, { status });
+      const listed = state.campaigns.find((c) => c.id === target.id);
+      if (listed) listed.status = result.status;
+      if (current?.id === target.id) current = result;
+      notice(
+        `${status === "paused" ? "Кампания приостановлена" : previousStatus === "paused" ? "Кампания возобновлена" : "Кампания запущена"}: ${target.name}`,
+        "success",
+      );
+    } catch (error) {
+      throw new Error(
+        `Не удалось ${status === "paused" ? "приостановить" : previousStatus === "paused" ? "возобновить" : "запустить"} кампанию: ${error.message}`,
+      );
+    } finally {
+      campaignActionsPending.delete(target.id);
+      if (page === "campaigns" && !root.querySelector("form.login")) {
+        if (current?.id === target.id) renderCampaign();
+        else if (!current) campaigns();
+      }
+    }
   });
   document.querySelectorAll("[data-tab]").forEach(
     (b) =>
