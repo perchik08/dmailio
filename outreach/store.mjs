@@ -673,6 +673,31 @@ export class Store {
           .all(r.id),
       }));
   }
+  campaignProgress() {
+    return this.db
+      .prepare(
+        `
+      WITH sent AS (
+        SELECT campaign_id,count(*) sentMessages,count(DISTINCT lead_id) contactedContacts
+        FROM messages WHERE campaign_id IS NOT NULL AND direction='out' AND status='sent'
+        AND kind NOT IN ('warmup','marketing','marketing_test') GROUP BY campaign_id
+      ), contacts AS (
+        SELECT campaign_id,count(*) totalContacts,
+        sum(status='replied') repliedContacts,
+        sum(status IN ('failed','invalid','uncertain')) attentionContacts
+        FROM leads GROUP BY campaign_id
+      )
+      SELECT c.id,c.status,coalesce(s.sentMessages,0) sentMessages,
+      coalesce(s.contactedContacts,0) contactedContacts,
+      coalesce(l.totalContacts,0) totalContacts,
+      coalesce(l.repliedContacts,0) repliedContacts,
+      coalesce(l.attentionContacts,0) attentionContacts
+      FROM campaigns c LEFT JOIN sent s ON s.campaign_id=c.id
+      LEFT JOIN contacts l ON l.campaign_id=c.id ORDER BY c.created DESC
+    `,
+      )
+      .all();
+  }
   leadPage(id, filters) {
     return queryLeads(this.db, id, filters);
   }

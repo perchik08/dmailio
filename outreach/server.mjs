@@ -430,6 +430,8 @@ export function createApp({
       }
       if (path === "/api/campaigns/draft" && method === "POST")
         return send(store.createCampaignDraft(data.name), 201);
+      if (path === "/api/campaigns/progress" && method === "GET")
+        return send({ campaigns: store.campaignProgress() });
       if (path === "/api/campaigns" && method === "POST")
         return send(store.saveCampaign(data), 201);
       const leads = path.match(/^\/api\/campaigns\/([^/]+)\/leads$/);
