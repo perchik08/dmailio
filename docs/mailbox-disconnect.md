@@ -1,6 +1,6 @@
 # Mailbox disconnect
 
-The Mailboxes page offers Disconnect with confirmation. The connection remains visible as Disconnected; mailbox identity, inbox history, campaigns, drafts, attachments and delivery records remain intact. Provider accounts and remote messages are never deleted by this action.
+The Mailboxes page offers Disconnect with confirmation. The connection disappears from the Mailboxes page and its counters; reconnect is available through the ordinary Connect mailbox dialog. Internally its disconnected identity remains to preserve history; mailbox identity, inbox history, campaigns, drafts, attachments and delivery records remain intact. Provider accounts and remote messages are never deleted by this action.
 
 The authenticated, same-origin POST /api/mailboxes/:id/disconnect atomically disables the mailbox and warmup consent, removes both encrypted application passwords, revokes marketing permission/default sender and pauses active campaigns referencing this mailbox. Repeated disconnect is idempotent.
 

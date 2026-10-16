@@ -809,27 +809,28 @@ function dialog(content) {
   el.addEventListener("close", () => el.remove());
 }
 function mailboxes() {
+  const connectedMailboxes = state.mailboxes.filter((m) => !m.detached);
   selectedMailboxes = new Set(
     [...selectedMailboxes].filter((id) =>
-      state.mailboxes.some((m) => m.id === id),
+      connectedMailboxes.some((m) => m.id === id),
     ),
   );
-  const warmupRows = state.mailboxes.filter((m) =>
+  const warmupRows = connectedMailboxes.filter((m) =>
     ["warming", "waiting"].includes(m.warmupStatus),
   ).length;
-  const averageWarmup = state.mailboxes.length
+  const averageWarmup = connectedMailboxes.length
     ? Math.round(
-        state.mailboxes.reduce((sum, m) => sum + m.warmupProgress.score, 0) /
-          state.mailboxes.length,
+        connectedMailboxes.reduce((sum, m) => sum + m.warmupProgress.score, 0) /
+          connectedMailboxes.length,
       )
     : 0;
   shell(
     `<div class="top"><div><h1>Почты</h1><p class="hint">Подключения, прогрев и техническое состояние ящиков</p></div><button id="add-mailbox" class="primary icon-button">${icon("plus")}Подключить почту</button></div>${
-      state.mailboxes.length
-        ? `<div class="mailbox-summary" aria-label="Сводка по почтам"><div><span>Всего ящиков</span><strong>${state.mailboxes.length}</strong></div><div><span>Прогрев включён</span><strong>${warmupRows}</strong></div><div><span>Средний прогрев</span><strong>${averageWarmup}%</strong></div></div><div class="alert warmup-note"><strong>Автопрогрев</strong> рассчитан на 14 активных дней: Dmailio сам плавно увеличивает объём с 2 до 10 писем в день. Процент учитывает активные дни, выполнение плана, успешную отправку и получение писем. Это ориентир готовности, а не гарантия попадания во входящие.</div><section class="mailbox-panel"><div class="mailbox-toolbar"><label class="mailbox-search">Поиск<input id="mailbox-search" type="search" placeholder="Имя или адрес почты"></label><div class="bulk-actions"><span id="selected-count">Ничего не выбрано</span><button id="bulk-start" class="primary" disabled>Включить прогрев</button><button id="bulk-pause" disabled>Поставить на паузу</button></div></div><div class="table-scroll"><table class="mailbox-table"><thead><tr><th class="select-cell"><input id="select-all-mailboxes" type="checkbox" aria-label="Выбрать все почты"></th><th class="switch-cell">Прогрев</th><th>Ящик</th><th class="num">Прогрето</th><th class="num">Отправлено</th><th class="num">Ответы</th><th class="num">Здоровье</th><th>Действия</th></tr></thead><tbody>${state.mailboxes
+      connectedMailboxes.length
+        ? `<div class="mailbox-summary" aria-label="Сводка по почтам"><div><span>Всего ящиков</span><strong>${connectedMailboxes.length}</strong></div><div><span>Прогрев включён</span><strong>${warmupRows}</strong></div><div><span>Средний прогрев</span><strong>${averageWarmup}%</strong></div></div><div class="alert warmup-note"><strong>Автопрогрев</strong> рассчитан на 14 активных дней: Dmailio сам плавно увеличивает объём с 2 до 10 писем в день. Процент учитывает активные дни, выполнение плана, успешную отправку и получение писем. Это ориентир готовности, а не гарантия попадания во входящие.</div><section class="mailbox-panel"><div class="mailbox-toolbar"><label class="mailbox-search">Поиск<input id="mailbox-search" type="search" placeholder="Имя или адрес почты"></label><div class="bulk-actions"><span id="selected-count">Ничего не выбрано</span><button id="bulk-start" class="primary" disabled>Включить прогрев</button><button id="bulk-pause" disabled>Поставить на паузу</button></div></div><div class="table-scroll"><table class="mailbox-table"><thead><tr><th class="select-cell"><input id="select-all-mailboxes" type="checkbox" aria-label="Выбрать все почты"></th><th class="switch-cell">Прогрев</th><th>Ящик</th><th class="num">Прогрето</th><th class="num">Отправлено</th><th class="num">Ответы</th><th class="num">Здоровье</th><th>Действия</th></tr></thead><tbody>${connectedMailboxes
             .map(
               (m) =>
-                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td class="switch-cell"><label class="switch" title="${!m.verified ? "Сначала проверьте почту" : !m.enabled ? "Ящик отключён" : "Включить или приостановить прогрев"}"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-mailbox-detail="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td class="num"><button class="warmup-score" data-mailbox-detail="${m.id}" aria-label="${escape(m.email)} прогрет на ${m.warmupProgress.score} процентов"><span class="warmup-score-head"><strong>${m.warmupProgress.score}%</strong><b>${escape(m.warmupProgress.label)}</b></span><span class="progress"><span style="width:${m.warmupProgress.score}%"></span></span><small>${m.warmupStatus === "warming" ? `день ${m.warmupProgress.day} из 14 · ${m.currentWarmupLimit} ${mailWord(m.currentWarmupLimit)}/день` : escape(labels[m.warmupStatus] || m.warmupStatus)}</small>${m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td class="num"><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td class="num"><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td class="num"><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-mailbox-detail="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}" class="icon-button">${icon("signature")}Подпись</button><button data-mailbox-settings="${m.id}" class="icon-button">${icon("gear")}Настройки</button>${m.detached ? `<button data-reconnect-mailbox="${m.id}">Подключить снова</button>` : `<button data-verify="${m.id}" class="icon-button">${icon("circle-check")}${m.verified ? "Перепроверить" : "Проверить"}</button><button data-disconnect-mailbox="${m.id}">Отвязать</button>`}</div></td></tr>`,
+                `<tr data-mailbox-row data-search="${escape(`${m.email} ${m.name} ${m.surname}`.toLowerCase())}"><td class="select-cell"><input data-select-mailbox="${m.id}" type="checkbox" aria-label="Выбрать ${escape(m.email)}" ${selectedMailboxes.has(m.id) ? "checked" : ""}></td><td class="switch-cell"><label class="switch" title="${!m.verified ? "Сначала проверьте почту" : !m.enabled ? "Ящик отключён" : "Включить или приостановить прогрев"}"><input data-warmup-toggle="${m.id}" type="checkbox" ${m.warmup?.enabled ? "checked" : ""} ${!m.verified || !m.enabled ? "disabled" : ""}><span></span><b class="sr-only">Прогрев ${escape(m.email)}</b></label></td><td><button class="mailbox-name" data-mailbox-detail="${m.id}"><strong>${escape(m.email)}</strong><small>${escape([m.name, m.surname].filter(Boolean).join(" ") || "Без имени отправителя")}</small></button></td><td class="num"><button class="warmup-score" data-mailbox-detail="${m.id}" aria-label="${escape(m.email)} прогрет на ${m.warmupProgress.score} процентов"><span class="warmup-score-head"><strong>${m.warmupProgress.score}%</strong><b>${escape(m.warmupProgress.label)}</b></span><span class="progress"><span style="width:${m.warmupProgress.score}%"></span></span><small>${m.warmupStatus === "warming" ? `день ${m.warmupProgress.day} из 14 · ${m.currentWarmupLimit} ${mailWord(m.currentWarmupLimit)}/день` : escape(labels[m.warmupStatus] || m.warmupStatus)}</small>${m.error ? `<small class="error-note">${escape(m.error)}</small>` : ""}</button></td><td class="num"><strong class="stat-number">${m.warmupStats.sent}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.sent24h}</small></td><td class="num"><strong class="stat-number">${m.warmupStats.replies}</strong><small class="cell-note">за 24 ч.: ${m.warmupStats.replies24h}</small></td><td class="num"><button class="health-score ${m.health.score >= 85 ? "healthy" : m.health.score >= 60 ? "warning" : "critical"}" data-mailbox-detail="${m.id}" aria-label="Техническое здоровье ${escape(m.email)}: ${m.health.score} из 100">${m.health.score}<span>/100</span></button></td><td><div class="row-actions"><button data-signature-mailbox="${m.id}" class="icon-button" title="Подпись" aria-label="Подпись">${icon("signature")}</button><button data-mailbox-settings="${m.id}" class="icon-button" title="Настройки" aria-label="Настройки">${icon("gear")}</button><button data-verify="${m.id}" class="icon-button" title="${m.verified ? "Перепроверить" : "Проверить"}" aria-label="${m.verified ? "Перепроверить" : "Проверить"}">${icon("circle-check")}</button><button data-disconnect-mailbox="${m.id}" class="icon-button mailbox-disconnect" title="Отвязать" aria-label="Отвязать">${icon("unlink")}</button></div></td></tr>`,
             )
             .join("")}</tbody></table></div></section>`
         : '<div class="empty"><h2>Подключите первый ящик</h2><p>SMTP отправляет письма, IMAP получает ответы. Потребуется пароль приложения вашего почтового провайдера.</p></div>'
@@ -908,7 +909,7 @@ function mailboxes() {
   click("bulk-pause", () => bulk(false));
   document.querySelectorAll("[data-warmup-toggle]").forEach((input) => {
     input.onchange = action(async () => {
-      const m = state.mailboxes.find(
+      const m = connectedMailboxes.find(
         (row) => row.id === input.dataset.warmupToggle,
       );
       const enabled = input.checked;
@@ -955,7 +956,7 @@ function mailboxes() {
       (b) =>
         (b.onclick = () =>
           signatureDialog(
-            state.mailboxes.find((m) => m.id === b.dataset.signatureMailbox),
+            connectedMailboxes.find((m) => m.id === b.dataset.signatureMailbox),
           )),
     );
   document
@@ -964,14 +965,15 @@ function mailboxes() {
       (b) =>
         (b.onclick = () =>
           mailboxDialog(
-            state.mailboxes.find((m) => m.id === b.dataset.editMailbox),
+            connectedMailboxes.find((m) => m.id === b.dataset.editMailbox),
           )),
     );
   document.querySelectorAll("[data-verify]").forEach(
     (b) =>
       (b.onclick = action(async () => {
         b.disabled = true;
-        b.textContent = "Проверка…";
+        b.setAttribute("aria-busy", "true");
+        b.title = "Проверка…";
         try {
           await api("/mailboxes/" + b.dataset.verify + "/verify", {});
           notice("SMTP и IMAP подключены");
@@ -983,7 +985,7 @@ function mailboxes() {
   document.querySelectorAll("[data-disconnect-mailbox]").forEach(
     (b) =>
       (b.onclick = action(async () => {
-        const m = state.mailboxes.find(
+        const m = connectedMailboxes.find(
           (m) => m.id === b.dataset.disconnectMailbox,
         );
         if (
@@ -1003,15 +1005,6 @@ function mailboxes() {
         }
       })),
   );
-  document
-    .querySelectorAll("[data-reconnect-mailbox]")
-    .forEach(
-      (b) =>
-        (b.onclick = () =>
-          mailboxDialog(
-            state.mailboxes.find((m) => m.id === b.dataset.reconnectMailbox),
-          )),
-    );
   updateSelection();
 }
 
