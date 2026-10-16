@@ -117,3 +117,18 @@ test("cancelled launch does nothing and failed launch shows an error without cla
     (await (await page.request.get("/api/campaigns/" + c.id)).json()).status,
   ).toBe("draft");
 });
+
+test("expired authentication during launch keeps the login screen visible", async ({
+  page,
+}) => {
+  const c = await fixture(page);
+  await page.route(`**/api/campaigns/${c.id}/status`, (route) =>
+    route.fulfill({ status: 401, json: { error: "Требуется вход" } }),
+  );
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Запустить", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Войти в команду", exact: true }),
+  ).toBeVisible({ timeout: 2000 });
+  await expect(page.locator("#notice")).toContainText("Требуется вход");
+});

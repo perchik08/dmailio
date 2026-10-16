@@ -674,7 +674,7 @@ function renderCampaign() {
       );
     } finally {
       campaignActionsPending.delete(target.id);
-      if (page === "campaigns") {
+      if (page === "campaigns" && !root.querySelector("form.login")) {
         if (current?.id === target.id) renderCampaign();
         else if (!current) campaigns();
       }
