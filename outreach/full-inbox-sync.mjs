@@ -104,109 +104,135 @@ export async function syncFullInbox(gateway, m, onMessage) {
         }
         let fetched = 0;
         if (current.uid < max) {
-          const endUid = Math.min(max, current.uid + MESSAGE_BATCH);
-          for await (const msg of c.fetch(
-            `${current.uid + 1}:${endUid}`,
-            {
-              source: { maxLength: MIME_LIMIT },
-              size: true,
-              internalDate: true,
-              flags: true,
-              emailId: true,
-            },
-            { uid: true },
-          )) {
-            const internalDate = new Date(msg.internalDate).getTime();
-            if (!Number.isFinite(internalDate))
-              throw Error(
-                "Provider returned no INTERNALDATE; baseline cannot be verified",
-              );
-            if (internalDate >= cursor.since) {
-              const source = Buffer.from(msg.source || []).subarray(
-                0,
-                MIME_LIMIT,
-              );
-              const p = await simpleParser(source, {
-                skipHtmlToText: false,
-                skipTextToHtml: true,
-                skipImageLinks: true,
-              });
-              const references = [
-                p.inReplyTo,
-                ...(Array.isArray(p.references)
-                  ? [...p.references].reverse()
-                  : p.references
-                    ? [p.references]
-                    : []),
-              ].filter(Boolean);
-              const type = classify(p);
-              if (type === "bounce")
-                for (const a of p.attachments || [])
+          let endUid = Math.min(max, current.uid + MESSAGE_BATCH);
+          let range = `${current.uid + 1}:${endUid}`;
+          if (typeof c.search === "function") {
+            // IMAP SINCE has day precision. Include an extra day for timezone
+            // boundaries; the exact INTERNALDATE baseline is still checked below.
+            const matches = await c.search(
+              {
+                uid: `${current.uid + 1}:${max}`,
+                since: new Date(cursor.since - 86400000),
+              },
+              { uid: true },
+            );
+            if (!Array.isArray(matches))
+              throw Error("Invalid UID search result");
+            const candidates = [...new Set(matches)]
+              .filter(
+                (uid) =>
+                  Number.isSafeInteger(uid) && uid > current.uid && uid <= max,
+              )
+              .sort((a, b) => a - b);
+            const batch = candidates.slice(0, MESSAGE_BATCH);
+            endUid = candidates.length > MESSAGE_BATCH ? batch.at(-1) : max;
+            range = batch.join(",");
+          }
+          if (range)
+            for await (const msg of c.fetch(
+              range,
+              {
+                source: { maxLength: MIME_LIMIT },
+                size: true,
+                internalDate: true,
+                flags: true,
+                emailId: true,
+              },
+              { uid: true },
+            )) {
+              const internalDate = new Date(msg.internalDate).getTime();
+              if (!Number.isFinite(internalDate))
+                throw Error(
+                  "Provider returned no INTERNALDATE; baseline cannot be verified",
+                );
+              if (internalDate >= cursor.since) {
+                const source = Buffer.from(msg.source || []).subarray(
+                  0,
+                  MIME_LIMIT,
+                );
+                const p = await simpleParser(source, {
+                  skipHtmlToText: false,
+                  skipTextToHtml: true,
+                  skipImageLinks: true,
+                });
+                const references = [
+                  p.inReplyTo,
+                  ...(Array.isArray(p.references)
+                    ? [...p.references].reverse()
+                    : p.references
+                      ? [p.references]
+                      : []),
+                ].filter(Boolean);
+                const type = classify(p);
+                if (type === "bounce")
+                  for (const a of p.attachments || [])
+                    if (
+                      ["message/rfc822", "text/rfc822-headers"].includes(
+                        a.contentType,
+                      )
+                    ) {
+                      const match = a.content
+                        .toString()
+                        .match(/^Message-ID:\s*(<[^>]+>)/im);
+                      if (match) references.unshift(match[1]);
+                    }
+                let attachmentBytes = 0,
+                  partial = Number(msg.size) > MIME_LIMIT;
+                const attachments = [];
+                for (const a of p.attachments || []) {
                   if (
-                    ["message/rfc822", "text/rfc822-headers"].includes(
-                      a.contentType,
-                    )
+                    attachments.length >= 20 ||
+                    attachmentBytes + a.content.length > ATTACHMENT_LIMIT
                   ) {
-                    const match = a.content
-                      .toString()
-                      .match(/^Message-ID:\s*(<[^>]+>)/im);
-                    if (match) references.unshift(match[1]);
+                    partial = true;
+                    continue;
                   }
-              let attachmentBytes = 0,
-                partial = Number(msg.size) > MIME_LIMIT;
-              const attachments = [];
-              for (const a of p.attachments || []) {
-                if (
-                  attachments.length >= 20 ||
-                  attachmentBytes + a.content.length > ATTACHMENT_LIMIT
-                ) {
-                  partial = true;
-                  continue;
+                  attachmentBytes += a.content.length;
+                  attachments.push({
+                    name: a.filename || "attachment",
+                    type: a.contentType || "application/octet-stream",
+                    data: a.content,
+                  });
                 }
-                attachmentBytes += a.content.length;
-                attachments.push({
-                  name: a.filename || "attachment",
-                  type: a.contentType || "application/octet-stream",
-                  data: a.content,
+                const identity = msg.emailId
+                  ? `provider:${msg.emailId}`
+                  : `sha256:${createHash("sha256")
+                      .update(source)
+                      .update(`\n${internalDate}\n${msg.size || source.length}`)
+                      .digest("hex")}`;
+                await onMessage({
+                  remoteId: `${path}:${validity}:${msg.uid}`,
+                  folder: path,
+                  validity,
+                  uid: msg.uid,
+                  identity,
+                  messageId: p.messageId,
+                  references,
+                  from: addresses(p.from)[0] || "",
+                  to: addresses(p.to),
+                  cc: addresses(p.cc),
+                  replyTo: addresses(p.replyTo),
+                  subject: p.subject || "",
+                  text:
+                    (p.text || "").slice(0, 200000) +
+                    (partial
+                      ? "\n\n[Large message processed partially; full content remains in the mailbox.]"
+                      : ""),
+                  html:
+                    typeof p.html === "string" ? p.html.slice(0, 200000) : "",
+                  internalDate,
+                  flags: Array.from(msg.flags || []),
+                  type,
+                  attachments,
+                  partial,
                 });
               }
-              const identity = msg.emailId
-                ? `provider:${msg.emailId}`
-                : `sha256:${createHash("sha256")
-                    .update(source)
-                    .update(`\n${internalDate}\n${msg.size || source.length}`)
-                    .digest("hex")}`;
-              await onMessage({
-                remoteId: `${path}:${validity}:${msg.uid}`,
-                folder: path,
-                validity,
-                uid: msg.uid,
-                identity,
-                messageId: p.messageId,
-                references,
-                from: addresses(p.from)[0] || "",
-                to: addresses(p.to),
-                cc: addresses(p.cc),
-                replyTo: addresses(p.replyTo),
-                subject: p.subject || "",
-                text:
-                  (p.text || "").slice(0, 200000) +
-                  (partial
-                    ? "\n\n[Large message processed partially; full content remains in the mailbox.]"
-                    : ""),
-                html: typeof p.html === "string" ? p.html.slice(0, 200000) : "",
-                internalDate,
-                flags: Array.from(msg.flags || []),
-                type,
-                attachments,
-                partial,
-              });
+              current.uid = Number(msg.uid);
+              fetched++;
+              if (fetched >= MESSAGE_BATCH) break;
             }
-            current.uid = Number(msg.uid);
-            fetched++;
-            if (fetched >= MESSAGE_BATCH) break;
-          }
-          if (fetched < MESSAGE_BATCH) current.uid = endUid;
+          if (fetched < MESSAGE_BATCH || typeof c.search === "function")
+            current.uid = endUid;
         }
         current.caughtUp = current.uid >= max;
         const store = gateway.store.fullInbox;
