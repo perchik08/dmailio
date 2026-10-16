@@ -66,6 +66,21 @@ const campaignBadge = (status) => {
   return `<span class="badge campaign-status ${escape(status)}">${escape(campaignLabels[status] || labels[status] || status)}</span>`;
 };
 const date = (t) => (t ? new Date(t).toLocaleString("ru-RU") : "—");
+const deliveryNote = (delivery) => {
+  if (!delivery) return "";
+  const smtp = delivery.legacy
+    ? "Ответ SMTP для этой старой отправки не сохранён"
+    : delivery.acceptedAt
+      ? `SMTP принял письмо: ${delivery.smtpResponse || "Ответ без текста"}`
+      : `SMTP: ${delivery.smtpResponse || delivery.smtpError || "Нет подтверждения принятия"}`;
+  const copy =
+    delivery.copyStatus === "copied"
+      ? "Копия сохранена в «Отправленных»"
+      : delivery.copyStatus === "error"
+        ? `Копия в «Отправленных» не сохранена: ${delivery.copyError}`
+        : "Копия в «Отправленных» ещё не сохранена";
+  return `<p class="hint">${escape(smtp)}<br>${escape(copy)}</p>`;
+};
 const mailWord = (n) => {
   const lastTwo = n % 100;
   if (lastTwo >= 11 && lastTwo <= 14) return "писем";
@@ -1635,7 +1650,7 @@ function analyticsBody(a) {
     )
     .join(
       "",
-    )}</div>${a.uncertain ? `<div class="alert">${a.uncertain} отправок с неизвестным результатом. Сверьтесь с журналом почтового провайдера. Затем подтвердите отправку или остановите цепочку в журнале ниже. Повторной отправки этого письма не будет.</div>` : ""}<div class="panel"><h2>Результаты шагов</h2><table><tr><th>Письмо</th><th class="num">Отправлено</th><th class="num">Ответы на шаг</th></tr>${a.steps.map((s) => `<tr><td>Письмо ${s.step}</td><td class="num">${s.sent}</td><td class="num">${s.replies}</td></tr>`).join("")}</table></div><div class="panel table-scroll"><h2>Журнал · последние 200 событий</h2><table><tr><th>Время</th><th>Получатель</th><th>Тип</th><th>Результат</th></tr>${a.events.map((e) => `<tr><td>${date(e.created)}</td><td>${escape(e.recipient)}</td><td>${escape(labels[e.kind] || e.kind)}</td><td>${badge(e.status)}${e.status === "unknown" ? `<p><button data-resolve='${e.id}' data-outcome='sent'>Подтвердить отправку</button> <button data-resolve='${e.id}' data-outcome='cancel'>Остановить</button></p>` : ""}<p class="hint">${escape(e.error)}</p></td></tr>`).join("")}</table></div><p class="hint">«Связались» и «Ответили» — уникальные контакты кампаний. «Отправлено» — сообщения, принятые SMTP. Открытия — уникальные сообщения с загрузкой пикселя. Прогрев исключён.</p>`;
+    )}</div>${a.uncertain ? `<div class="alert">${a.uncertain} отправок с неизвестным результатом. Сверьтесь с журналом почтового провайдера. Затем подтвердите отправку или остановите цепочку в журнале ниже. Повторной отправки этого письма не будет.</div>` : ""}<div class="panel"><h2>Результаты шагов</h2><table><tr><th>Письмо</th><th class="num">Отправлено</th><th class="num">Ответы на шаг</th></tr>${a.steps.map((s) => `<tr><td>Письмо ${s.step}</td><td class="num">${s.sent}</td><td class="num">${s.replies}</td></tr>`).join("")}</table></div><div class="panel table-scroll"><h2>Журнал · последние 200 событий</h2><table><tr><th>Время</th><th>Получатель</th><th>Тип</th><th>Результат</th></tr>${a.events.map((e) => `<tr><td>${date(e.created)}</td><td>${escape(e.recipient)}</td><td>${escape(labels[e.kind] || e.kind)}</td><td>${badge(e.status)}${e.status === "unknown" ? `<p><button data-resolve='${e.id}' data-outcome='sent'>Подтвердить отправку</button> <button data-resolve='${e.id}' data-outcome='cancel'>Остановить</button></p>` : ""}<p class="hint">${escape(e.error)}</p>${deliveryNote(e.delivery)}</td></tr>`).join("")}</table></div><p class="hint">«Связались» и «Ответили» — уникальные контакты кампаний. «Отправлено» — сообщения, принятые SMTP. Открытия — уникальные сообщения с загрузкой пикселя. Прогрев исключён.</p>`;
 }
 async function analytics() {
   const a = await api("/analytics?campaign=" + analyticsCampaign);
