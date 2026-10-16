@@ -80,6 +80,28 @@ test("campaign send counts reflect successful outbound history, distinct contact
   assert.equal(rows.find((r) => r.id === empty.id).sentMessages, 0);
   assert.equal(rows.find((r) => r.id === empty.id).contactedContacts, 0);
   assert.equal(rows.find((r) => r.id === other.id).sentMessages, 1);
+  const progress = s.campaignProgress().find((r) => r.id === c.id);
+  assert.equal(progress.sentMessages, 4);
+  assert.equal(progress.contactedContacts, 2);
+  assert.equal(progress.totalContacts, 3);
+  assert.equal(progress.repliedContacts, 1);
+  assert.equal(progress.attentionContacts, 0);
+  assert.deepEqual(
+    Object.keys(progress).sort(),
+    [
+      "id",
+      "status",
+      "sentMessages",
+      "contactedContacts",
+      "totalContacts",
+      "repliedContacts",
+      "attentionContacts",
+    ].sort(),
+  );
+  assert.equal(
+    s.campaignProgress().find((r) => r.id === empty.id).totalContacts,
+    0,
+  );
 });
 test("authenticated campaign state exposes numeric successful-send counters", async (t) => {
   const { s, c, leads, message } = fixture(t);
@@ -96,6 +118,7 @@ test("authenticated campaign state exposes numeric successful-send counters", as
   t.after(() => new Promise((r) => app.close(r)));
   const base = `http://127.0.0.1:${app.address().port}`;
   assert.equal((await fetch(base + "/api/state")).status, 401);
+  assert.equal((await fetch(base + "/api/campaigns/progress")).status, 401);
   const login = await fetch(base + "/api/login", {
     method: "POST",
     headers: { Origin: "http://localhost:9100" },
@@ -108,4 +131,13 @@ test("authenticated campaign state exposes numeric successful-send counters", as
   const row = state.campaigns.find((r) => r.id === c.id);
   assert.equal(row.sentMessages, 2);
   assert.equal(row.contactedContacts, 1);
+  const response = await fetch(base + "/api/campaigns/progress", {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(response.status, 200);
+  const progress = (await response.json()).campaigns.find((r) => r.id === c.id);
+  assert.equal(progress.sentMessages, 2);
+  assert.equal(progress.contactedContacts, 1);
+  assert.equal(progress.config, undefined);
+  assert.equal(progress.leads, undefined);
 });

@@ -87,7 +87,9 @@ let state = { mailboxes: [], campaigns: [] },
   selectedMailboxes = new Set(),
   mailboxDetailId = "",
   mailboxDetailTab = "stats";
+let progressRevision = 0;
 async function api(path, data) {
+  if (data !== undefined) progressRevision++;
   const r = await fetch("/api" + path, {
     method: data === undefined ? "GET" : "POST",
     headers: data === undefined ? {} : { "Content-Type": "application/json" },
@@ -253,6 +255,7 @@ function shell(body) {
   });
 }
 function login() {
+  progressRevision++;
   root.querySelector("#marketing-root")?.disposeLetter?.();
   root.innerHTML =
     '<form class="login"><div class="logo">dmailio</div><h1>Войти в команду</h1><p class="hint">Введите пароль администратора вашей установки.</p><label>Пароль<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Войти</button></form>';
@@ -263,6 +266,7 @@ function login() {
   });
 }
 async function refresh() {
+  progressRevision++;
   state = await api("/state");
   if (location.hash.startsWith("#marketing/")) {
     current = null;
@@ -287,10 +291,120 @@ async function refresh() {
   if (page === "analytics") await analytics();
 }
 window.addEventListener("hashchange", action(refresh));
+let progressBusy = false;
+const progressFields = [
+  "totalContacts",
+  "sentMessages",
+  "contactedContacts",
+  "repliedContacts",
+  "attentionContacts",
+];
+function progressSummary() {
+  const stats = state.campaigns.find((c) => c.id === current.id) || {};
+  return `<div id="campaign-progress" data-progress-id="${escape(current.id)}" class="row"><span>Отправлено писем: <strong data-live-metric="sentMessages">${stats.sentMessages ?? 0}</strong></span><span>Контактов с отправкой: <strong data-live-metric="contactedContacts">${stats.contactedContacts ?? 0}</strong></span><button type="button" id="refresh-progress">Обновить статистику</button><span class="hint" data-progress-hint>Автообновление каждые 30 с</span></div>`;
+}
+async function updateCampaignProgress(manual = false) {
+  const scope = root.querySelector("#campaign-progress");
+  if (
+    progressBusy ||
+    !scope ||
+    page !== "campaigns" ||
+    document.visibilityState === "hidden"
+  )
+    return;
+  progressBusy = true;
+  const revision = progressRevision;
+  const button = root.querySelector("#refresh-progress");
+  if (button) {
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  }
+  try {
+    const response = await fetch("/api/campaigns/progress", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (
+      !scope.isConnected ||
+      revision !== progressRevision ||
+      document.visibilityState === "hidden"
+    )
+      return;
+    if (response.status === 401) {
+      login();
+      return;
+    }
+    if (!response.ok) throw Error("Не удалось обновить статистику");
+    const data = await response.json();
+    if (
+      !scope.isConnected ||
+      revision !== progressRevision ||
+      document.visibilityState === "hidden"
+    )
+      return;
+    for (const stats of data.campaigns) {
+      const model = state.campaigns.find((c) => c.id === stats.id);
+      if (model)
+        Object.assign(model, {
+          status: stats.status,
+          sentMessages: stats.sentMessages,
+          contactedContacts: stats.contactedContacts,
+        });
+      for (const node of root.querySelectorAll("[data-progress-id]")) {
+        if (node.dataset.progressId !== stats.id) continue;
+        for (const field of progressFields) {
+          const cell = node.querySelector(`[data-live-metric="${field}"]`);
+          if (cell && cell.textContent !== String(stats[field]))
+            cell.textContent = stats[field];
+        }
+        const badge = node.querySelector(".campaign-status");
+        if (badge && !campaignActionsPending.has(stats.id)) {
+          badge.outerHTML = campaignBadge(stats.status);
+        }
+      }
+      if (
+        current?.id === stats.id &&
+        current.status !== "draft" &&
+        !campaignActionsPending.has(stats.id)
+      ) {
+        current.status = stats.status;
+        const badge = root.querySelector(".top .campaign-status");
+        if (badge) badge.outerHTML = campaignBadge(stats.status);
+        const toggle = root.querySelector("#toggle");
+        if (toggle) {
+          toggle.disabled = stats.status === "completed";
+          toggle.textContent =
+            stats.status === "active" ? "Пауза" : "Запустить";
+        }
+      }
+    }
+    const hint = root.querySelector("[data-progress-hint]");
+    if (hint)
+      hint.textContent = `Обновлено ${new Date().toLocaleTimeString("ru-RU")} · каждые 30 с`;
+  } catch {
+    if (scope.isConnected && revision === progressRevision) {
+      const hint = root.querySelector("[data-progress-hint]");
+      if (hint) hint.textContent = "Нет обновления. Повторим автоматически";
+      if (manual)
+        notice("Не удалось обновить статистику. Попробуйте ещё раз.", "error");
+    }
+  } finally {
+    progressBusy = false;
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
+  }
+}
+setInterval(() => updateCampaignProgress(), 30000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") updateCampaignProgress();
+});
 function campaigns() {
   shell(
-    `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num" title="Успешные отправки писем цепочки и ручных ответов в этой кампании. Принятие SMTP не подтверждает доставку.">Отправлено писем</th><th class="num" title="Уникальные контакты кампании с хотя бы одной успешной отправкой. Повторные письма одному контакту не увеличивают число.">Контактов с отправкой</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${campaignBadge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.sentMessages ?? 0}</td><td class="num">${c.contactedContacts ?? 0}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
+    `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><div class="row"><button type="button" id="refresh-progress">Обновить статистику</button><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll" id="campaign-progress"><p class="hint" data-progress-hint>Автообновление каждые 30 с</p><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num" title="Успешные отправки писем цепочки и ручных ответов в этой кампании. Принятие SMTP не подтверждает доставку.">Отправлено писем</th><th class="num" title="Уникальные контакты кампании с хотя бы одной успешной отправкой. Повторные письма одному контакту не увеличивают число.">Контактов с отправкой</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr data-progress-id="${c.id}"><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${campaignBadge(c.status)}</td><td class="num" data-live-metric="totalContacts">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num" data-live-metric="sentMessages">${c.sentMessages ?? 0}</td><td class="num" data-live-metric="contactedContacts">${c.contactedContacts ?? 0}</td><td class="num" data-live-metric="repliedContacts">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num" data-live-metric="attentionContacts">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
   );
+  click("refresh-progress", () => updateCampaignProgress(true));
   click("new", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -312,6 +426,7 @@ function campaigns() {
   document.querySelectorAll("[data-campaign]").forEach(
     (b) =>
       (b.onclick = action(async () => {
+        progressRevision++;
         current = await api("/campaigns/" + b.dataset.campaign);
         activeTab = "leads";
         stepIndex = 0;
@@ -634,7 +749,7 @@ function renderCampaign() {
   const busy = campaignActionsPending.has(current.id);
   const editable = current.status === "draft" && !busy;
   shell(
-    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${campaignBadge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" || busy ? "disabled" : ""} aria-busy="${busy}">${busy ? (current.status === "active" ? "Приостанавливаем…" : current.status === "paused" ? "Возобновляем…" : "Запускаем…") : current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div><div class="tabs">${[
+    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${campaignBadge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" || busy ? "disabled" : ""} aria-busy="${busy}">${busy ? (current.status === "active" ? "Приостанавливаем…" : current.status === "paused" ? "Возобновляем…" : "Запускаем…") : current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div>${progressSummary()}<div class="tabs">${[
       ["leads", "1. Лиды"],
       ["sequence", "2. Цепочка"],
       ["settings", "3. Настройки"],
@@ -647,6 +762,7 @@ function renderCampaign() {
       .join("")}</div><div id="campaign-content"></div>`,
   );
   bindCampaignTitle();
+  click("refresh-progress", () => updateCampaignProgress(true));
   click("back", async () => {
     current = null;
     await refresh();
