@@ -18,8 +18,11 @@ export class CampaignDelivery {
     )`);
   }
   get(id, raw = false) {
+    const columns = raw
+      ? "*"
+      : "smtp_response,smtp_message_id,accepted,rejected,accepted_at,smtp_error,copy_status,copy_error,copy_folder,copied_at,legacy";
     const r = this.db
-      .prepare("SELECT * FROM campaign_delivery WHERE message_id=?")
+      .prepare(`SELECT ${columns} FROM campaign_delivery WHERE message_id=?`)
       .get(id);
     if (!r) return null;
     return {
