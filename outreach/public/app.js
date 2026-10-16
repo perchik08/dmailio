@@ -587,10 +587,6 @@ function wireImportWizard() {
           return;
         const subject =
           review.steps[0].subject || current.steps[0]?.subject || "";
-        if (!subject.trim())
-          throw new Error(
-            "Заполните тему первого письма во вкладке «Цепочка» или сопоставьте колонку «Тема цепочки»",
-          );
         current.steps = review.steps.map((step, index) => ({
           ...step,
           subject: index === 0 ? subject : step.subject,
@@ -598,10 +594,6 @@ function wireImportWizard() {
           includeSignature: true,
         }));
         stepIndex = 0;
-      } else if (!current.id) {
-        throw new Error(
-          "Сначала добавьте текст первого письма во вкладке «Цепочка» и сохраните кампанию",
-        );
       }
       current = await api("/campaigns", current);
       const result = await api(`/campaigns/${current.id}/import`, {
