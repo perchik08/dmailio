@@ -684,7 +684,8 @@ dialog::backdrop {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  max-width: 500px;
+  max-width: min(500px, calc(100vw - 48px));
+  overflow-wrap: anywhere;
   padding: 0;
   z-index: 100;
   background: #252638;
@@ -694,6 +695,16 @@ dialog::backdrop {
 }
 #notice:not(:empty) {
   padding: 16px 22px;
+}
+#notice[data-kind="success"]:not(:empty) {
+  background: #ecfdf3;
+  color: #175c35;
+  border: 1px solid #7de3a3;
+}
+#notice[data-kind="error"]:not(:empty) {
+  background: #fff1f0;
+  color: #8b1f22;
+  border: 1px solid #f3a8a2;
 }
 .right {
   text-align: right;
