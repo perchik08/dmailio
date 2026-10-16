@@ -477,6 +477,18 @@ td button {
   background: #fff4de;
   color: #8b641c;
 }
+.badge.campaign-status.active {
+  background: #e9f7ef;
+  color: #27734d;
+}
+.badge.campaign-status.paused {
+  background: #fff0f0;
+  color: #ae4049;
+}
+.badge.campaign-status.completed {
+  background: #edf1f6;
+  color: #475569;
+}
 .row {
   display: flex;
   align-items: center;

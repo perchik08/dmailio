@@ -368,6 +368,36 @@ test("reservation is exclusive, successful send advances a stable-sender chain",
   assert.equal(lead.due, now + 3 * 86400000);
   s.close();
 });
+test("campaign completes only after the last contact finishes every step", () => {
+  const { s, m, c } = setup();
+  const now = Date.now();
+  s.db.prepare("UPDATE campaigns SET status='draft' WHERE id=?").run(c.id);
+  s.importContacts(c.id, [
+    { email: "second@example.com", fields: { name: "Анна" } },
+  ]);
+  s.setCampaignStatus(c.id, "active");
+  const healthy = new Set([m.id]);
+  try {
+    const first = s.reserve(now, healthy);
+    s.finish(first.id, "sent", now);
+    assert.equal(s.campaign(c.id).status, "active");
+    const second = s.reserve(now + 120000, healthy);
+    s.finish(second.id, "sent", now + 120000);
+    const followupTime = now + 4 * 86400000;
+    const followup = s.reserve(followupTime, healthy);
+    s.finish(followup.id, "sent", followupTime);
+    assert.equal(s.campaign(c.id).status, "active");
+    const last = s.reserve(followupTime + 120000, healthy);
+    s.finish(last.id, "sent", followupTime + 120000);
+    assert.equal(s.campaign(c.id).status, "completed");
+    assert.ok(s.campaign(c.id).leads.every((l) => l.status === "completed"));
+    assert.equal(s.reserve(followupTime + 240000, healthy), null);
+    assert.throws(() => s.setCampaignStatus(c.id, "active"), /завершена/);
+  } finally {
+    s.close();
+  }
+});
+
 test("correlated reply stops followup and duplicate inbound is idempotent", () => {
   const { s, m, c } = setup();
   const now = Date.now();

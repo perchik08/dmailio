@@ -56,6 +56,15 @@ const labels = {
 };
 const badge = (s) =>
   `<span class="badge ${escape(s)}">${escape(labels[s] || s)}</span>`;
+const campaignBadge = (status) => {
+  const campaignLabels = {
+    draft: "Черновик",
+    active: "Активна",
+    paused: "Остановлена",
+    completed: "Закончена",
+  };
+  return `<span class="badge campaign-status ${escape(status)}">${escape(campaignLabels[status] || labels[status] || status)}</span>`;
+};
 const date = (t) => (t ? new Date(t).toLocaleString("ru-RU") : "—");
 const mailWord = (n) => {
   const lastTwo = n % 100;
@@ -280,7 +289,7 @@ async function refresh() {
 window.addEventListener("hashchange", action(refresh));
 function campaigns() {
   shell(
-    `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num" title="Успешные отправки писем цепочки и ручных ответов в этой кампании. Принятие SMTP не подтверждает доставку.">Отправлено писем</th><th class="num" title="Уникальные контакты кампании с хотя бы одной успешной отправкой. Повторные письма одному контакту не увеличивают число.">Контактов с отправкой</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${badge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.sentMessages ?? 0}</td><td class="num">${c.contactedContacts ?? 0}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
+    `<div class="top"><div><h1>Кампании</h1><p class="hint">Контакты, персональные письма и последовательность касаний</p></div><button id="new" class="primary icon-button">${icon("plus")}Создать кампанию</button></div>${state.workerError ? `<div class="alert">${escape(state.workerError)}</div>` : ""}${state.campaigns.length ? `<div class="panel table-scroll"><table><thead><tr><th>Кампания</th><th>Статус</th><th class="num">Контакты</th><th class="num" title="Успешные отправки писем цепочки и ручных ответов в этой кампании. Принятие SMTP не подтверждает доставку.">Отправлено писем</th><th class="num" title="Уникальные контакты кампании с хотя бы одной успешной отправкой. Повторные письма одному контакту не увеличивают число.">Контактов с отправкой</th><th class="num">Ответили</th><th class="num">Требуют внимания</th></tr></thead><tbody>${state.campaigns.map((c) => `<tr><td><button data-campaign="${c.id}">${escape(c.name)}</button></td><td>${campaignBadge(c.status)}</td><td class="num">${c.counts.reduce((n, r) => n + r.count, 0)}</td><td class="num">${c.sentMessages ?? 0}</td><td class="num">${c.contactedContacts ?? 0}</td><td class="num">${c.counts.find((r) => r.status === "replied")?.count || 0}</td><td class="num">${c.counts.filter((r) => ["failed", "invalid", "uncertain"].includes(r.status)).reduce((n, r) => n + r.count, 0)}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty"><h2>Начните с первой кампании</h2><p>Загрузите таблицу с контактами и текстами. Dmailio предложит шаги цепочки, а вы выберете отправителей и расписание.</p><a href="/api/template.csv">Скачать шаблон CSV</a></div>'}`,
   );
   click("new", async (event) => {
     const button = event.currentTarget;
@@ -625,7 +634,7 @@ function renderCampaign() {
   const busy = campaignActionsPending.has(current.id);
   const editable = current.status === "draft" && !busy;
   shell(
-    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${badge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" || busy ? "disabled" : ""} aria-busy="${busy}">${busy ? (current.status === "active" ? "Приостанавливаем…" : current.status === "paused" ? "Возобновляем…" : "Запускаем…") : current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div><div class="tabs">${[
+    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${campaignBadge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" || busy ? "disabled" : ""} aria-busy="${busy}">${busy ? (current.status === "active" ? "Приостанавливаем…" : current.status === "paused" ? "Возобновляем…" : "Запускаем…") : current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div><div class="tabs">${[
       ["leads", "1. Лиды"],
       ["sequence", "2. Цепочка"],
       ["settings", "3. Настройки"],
