@@ -645,6 +645,18 @@ export class Store {
     return this.campaign(id);
   }
   campaigns() {
+    const deliveryCounts = new Map(
+      this.db
+        .prepare(
+          `
+      SELECT campaign_id, count(*) AS sentMessages, count(DISTINCT lead_id) AS contactedContacts
+      FROM messages WHERE campaign_id IS NOT NULL AND direction='out' AND status='sent'
+      AND kind NOT IN ('warmup','marketing','marketing_test') GROUP BY campaign_id
+    `,
+        )
+        .all()
+        .map((row) => [row.campaign_id, row]),
+    );
     return this.db
       .prepare("SELECT * FROM campaigns ORDER BY created DESC")
       .all()
@@ -652,6 +664,8 @@ export class Store {
         ...r,
         ...JSON.parse(r.config),
         config: undefined,
+        sentMessages: deliveryCounts.get(r.id)?.sentMessages ?? 0,
+        contactedContacts: deliveryCounts.get(r.id)?.contactedContacts ?? 0,
         counts: this.db
           .prepare(
             "SELECT status,count(*) count FROM leads WHERE campaign_id=? GROUP BY status",
