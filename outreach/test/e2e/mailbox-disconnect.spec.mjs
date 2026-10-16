@@ -22,6 +22,12 @@ test("disconnect requires confirmation, persists after reload and reconnects the
   const row = page
     .locator("[data-mailbox-row]")
     .filter({ has: page.locator(`[data-mailbox-detail="${box.id}"]`) });
+  for (const name of ["Подпись", "Настройки", "Проверить", "Отвязать"]) {
+    const action = row.getByRole("button", { name, exact: true });
+    await expect(action).toHaveAttribute("title", name);
+    await expect(action.locator(".ui-icon")).toBeVisible();
+    expect((await action.textContent()).trim()).toBe("");
+  }
   page.once("dialog", (d) => d.dismiss());
   await row.getByRole("button", { name: "Отвязать", exact: true }).click();
   expect(
@@ -31,17 +37,19 @@ test("disconnect requires confirmation, persists after reload and reconnects the
   ).toBe(false);
   page.once("dialog", (d) => d.accept());
   await row.getByRole("button", { name: "Отвязать", exact: true }).click();
-  await expect(row).toContainText("Отключена");
-  await expect(
-    row.getByRole("button", { name: "Подключить снова", exact: true }),
-  ).toBeVisible();
+  await expect(row).toHaveCount(0);
   await page.reload();
   await page.getByRole("button", { name: "Почты", exact: true }).click();
-  await expect(row).toContainText("Отключена");
-  await row
-    .getByRole("button", { name: "Подключить снова", exact: true })
+  await expect(row).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Подключить снова", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Подключить почту", exact: true })
     .click();
-  await expect(page.locator("[name=email]")).toHaveValue(address);
+  await page.locator("[name=email]").fill(address);
+  await page.locator("[name=smtpHost]").fill("smtp.example.com");
+  await page.locator("[name=imapHost]").fill("imap.example.com");
   for (const field of ["smtpPassword", "imapPassword"]) {
     await expect(page.locator(`[name=${field}]`)).toHaveAttribute(
       "required",
@@ -64,5 +72,5 @@ test("disconnect requires confirmation, persists after reload and reconnects the
   // Leave the disposable fixture detached; no provider connections were opened.
   page.once("dialog", (d) => d.accept());
   await row.getByRole("button", { name: "Отвязать", exact: true }).click();
-  await expect(row).toContainText("Отключена");
+  await expect(row).toHaveCount(0);
 });
