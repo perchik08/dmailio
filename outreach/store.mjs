@@ -61,7 +61,7 @@ export class Store {
     this.key = Buffer.from(key, "hex");
     this.db = new DatabaseSync(path);
     this.db
-      .exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+      .exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS mailboxes(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,config TEXT NOT NULL,secrets TEXT NOT NULL,verified INTEGER DEFAULT 0,error TEXT DEFAULT '',last_sync INTEGER DEFAULT 0,cursor TEXT DEFAULT '{}');
       CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY,name TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',config TEXT NOT NULL,created INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS leads(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL REFERENCES campaigns(id),email TEXT NOT NULL,fields TEXT NOT NULL,mailbox_id TEXT REFERENCES mailboxes(id),step INTEGER DEFAULT 0,status TEXT DEFAULT 'pending',due INTEGER DEFAULT 0, UNIQUE(campaign_id,email));
@@ -645,6 +645,18 @@ export class Store {
     return this.campaign(id);
   }
   campaigns() {
+    const deliveryCounts = new Map(
+      this.db
+        .prepare(
+          `
+      SELECT campaign_id, count(*) AS sentMessages, count(DISTINCT lead_id) AS contactedContacts
+      FROM messages WHERE campaign_id IS NOT NULL AND direction='out' AND status='sent'
+      AND kind NOT IN ('warmup','marketing','marketing_test') GROUP BY campaign_id
+    `,
+        )
+        .all()
+        .map((row) => [row.campaign_id, row]),
+    );
     return this.db
       .prepare("SELECT * FROM campaigns ORDER BY created DESC")
       .all()
@@ -652,6 +664,8 @@ export class Store {
         ...r,
         ...JSON.parse(r.config),
         config: undefined,
+        sentMessages: deliveryCounts.get(r.id)?.sentMessages ?? 0,
+        contactedContacts: deliveryCounts.get(r.id)?.contactedContacts ?? 0,
         counts: this.db
           .prepare(
             "SELECT status,count(*) count FROM leads WHERE campaign_id=? GROUP BY status",
