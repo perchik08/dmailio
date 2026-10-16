@@ -27,6 +27,12 @@ export class Worker {
       );
       this.store.finish(message.id, "sent");
     } catch (e) {
+      const receipt = this.store.campaignDelivery?.get(message.id);
+      if (receipt?.acceptedAt) {
+        if (this.store.message(message.id).status === "sending")
+          this.store.finish(message.id, "sent", receipt.acceptedAt);
+        return this.store.message(message.id);
+      }
       this.store.dispatch.fail(message.mailbox_id, e);
       this.store.finish(
         message.id,
@@ -72,6 +78,17 @@ export class Worker {
           if (cursor.caughtUp !== false) healthy.add(m.id);
         } catch {
           this.store.syncError(m.id, m.connectionRevision);
+        }
+      }
+      if (this.gateway.restoreCampaignCopy) {
+        for (const copy of this.store.campaignDelivery.pendingCopies(healthy)) {
+          if (!healthy.has(copy.mailbox_id)) continue;
+          if (!this.lease()) return;
+          await this.gateway.restoreCampaignCopy(
+            this.store.mailbox(copy.mailbox_id, true),
+            this.store.message(copy.id),
+          );
+          break; // At most one copy retry per tick; SMTP is never used here.
         }
       }
       for (let i = 0; i < 25; i++) {

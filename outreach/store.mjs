@@ -3,6 +3,7 @@ import { queryLeads } from "./leads.mjs";
 import { Dispatch } from "./dispatch.mjs";
 import { MailboxConnections } from "./mailbox-connections.mjs";
 import { FullInboxStore } from "./full-inbox-store.mjs";
+import { CampaignDelivery } from "./campaign-delivery.mjs";
 import { contentFormat, renderContent, validateImage } from "./content.mjs";
 import {
   randomUUID,
@@ -116,6 +117,7 @@ export class Store {
     this.fullInbox = new FullInboxStore(this);
     this.dispatch = new Dispatch(this);
     this.connections = new MailboxConnections(this);
+    this.campaignDelivery = new CampaignDelivery(this);
   }
   close() {
     this.db.close();
@@ -1220,6 +1222,12 @@ export class Store {
         .run(id);
   }
   recover(now) {
+    for (const row of this.db
+      .prepare(
+        "SELECT m.id,d.accepted_at FROM messages m JOIN campaign_delivery d ON d.message_id=m.id WHERE m.status='sending' AND d.accepted_at IS NOT NULL",
+      )
+      .all())
+      this.finish(row.id, "sent", row.accepted_at);
     this.db
       .prepare(
         "UPDATE leads SET status='uncertain' WHERE status='sending' AND id IN (SELECT lead_id FROM messages WHERE status='sending' AND created<?)",
@@ -1476,7 +1484,13 @@ export class Store {
             sent.some((m) => m.step === step && m.message_id === r.parent),
           ).length,
         })),
-      events: rows.slice(0, 200).map(({ body, token, ...m }) => m),
+      events: rows.slice(0, 200).map(({ body, token, ...m }) => ({
+        ...m,
+        delivery:
+          m.kind === "campaign" && m.direction === "out"
+            ? this.campaignDelivery.get(m.id)
+            : null,
+      })),
     };
   }
   track(token, now = Date.now()) {

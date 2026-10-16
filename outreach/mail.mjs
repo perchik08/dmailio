@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { sendCampaign, copyCampaignSent } from "./campaign-delivery.mjs";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { escapeHTML } from "./core.mjs";
@@ -44,6 +45,7 @@ export class MailGateway {
       "verify",
       "send",
       "sendMarketing",
+      "restoreCampaignCopy",
       "sync",
       "inspectWarmupPlacement",
       "updateFullMessage",
@@ -162,8 +164,7 @@ export class MailGateway {
   async updateFullMessage(m, locations, action) {
     return updateFullMessage(this, m, locations, action);
   }
-  async send(m, message) {
-    if (message.kind === "mail") return sendFullMessage(this, m, message);
+  mailOptions(m, message) {
     const unsubscribe = `${this.publicURL}/unsubscribe/${message.token}`;
     const formatted = renderContent(
       message,
@@ -187,31 +188,44 @@ export class MailGateway {
       this.store.campaign(message.campaign_id).trackOpens
     )
       html += `<img src="${this.publicURL}/open/${message.token}.gif" width="1" height="1" alt="">`;
+    return {
+      from: {
+        name: [m.name, m.surname].filter(Boolean).join(" "),
+        address: m.email,
+      },
+      to: message.recipient,
+      subject: message.subject,
+      text,
+      html,
+      attachments: formatted.attachments,
+      messageId: message.message_id,
+      inReplyTo: message.parent || undefined,
+      references: message.parent ? [message.parent] : undefined,
+      disableFileAccess: true,
+      disableUrlAccess: true,
+      headers:
+        message.kind === "campaign"
+          ? {
+              "List-Unsubscribe": `<${unsubscribe}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }
+          : {},
+    };
+  }
+  async restoreCampaignCopy(m, message) {
+    const stored = this.store.message(message.id);
+    if (stored?.kind !== "campaign" || stored.status !== "sent")
+      throw Error("Копирование доступно только отправленному письму кампании");
+    return copyCampaignSent(this, m, stored, this.mailOptions(m, stored));
+  }
+  async send(m, message) {
+    if (message.kind === "mail") return sendFullMessage(this, m, message);
+    const options = this.mailOptions(m, message);
+    if (message.kind === "campaign" && this.store.campaignDelivery)
+      return sendCampaign(this, m, message, options);
     const transport = this.transport(m);
     try {
-      const result = await transport.sendMail({
-        from: {
-          name: [m.name, m.surname].filter(Boolean).join(" "),
-          address: m.email,
-        },
-        to: message.recipient,
-        subject: message.subject,
-        text,
-        html,
-        attachments: formatted.attachments,
-        messageId: message.message_id,
-        inReplyTo: message.parent || undefined,
-        references: message.parent ? [message.parent] : undefined,
-        disableFileAccess: true,
-        disableUrlAccess: true,
-        headers:
-          message.kind === "campaign"
-            ? {
-                "List-Unsubscribe": `<${unsubscribe}>`,
-                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-              }
-            : {},
-      });
+      const result = await transport.sendMail(options);
       if (!result.accepted?.length) {
         const e = new Error("Rejected");
         e.definitive = true;
