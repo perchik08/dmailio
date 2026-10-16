@@ -136,6 +136,9 @@ export class MailGateway {
     const smtp = this.transport(m);
     try {
       await smtp.verify();
+    } catch (error) {
+      error.protocol = "SMTP";
+      throw error;
     } finally {
       smtp.close();
     }
@@ -149,6 +152,9 @@ export class MailGateway {
         uid: imap.mailbox.uidNext - 1,
         caughtUp: true,
       };
+    } catch (error) {
+      error.protocol = "IMAP";
+      throw error;
     } finally {
       imap.close();
     }

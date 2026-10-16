@@ -27,6 +27,49 @@ const here = dirname(fileURLToPath(import.meta.url));
 const hash = (s) => createHash("sha256").update(String(s)).digest();
 const sample =
   '\uFEFFemail,name,company,Тема цепочки,Письмо 1,Письмо 2,Письмо 3\r\ndemo@example.com,Иван,Пример,Вопрос для {{company}},"{{name}}, добрый день! Меня зовут {{Имя Отправителя}}.","Возвращаюсь к вопросу, {{name}}.",Подскажите пожалуйста актуально ли предложение?\r\n';
+function verificationError(error) {
+  const protocol = ["SMTP", "IMAP"].includes(error.protocol)
+    ? error.protocol
+    : "SMTP/IMAP";
+  if (error.code === "MAILBOX_DETACHED")
+    return "Подключение изменилось или почта отключена. Выполните проверку нового подключения.";
+  if (
+    error.code === "EAUTH" ||
+    error.authenticationFailed ||
+    error.responseCode === 535
+  )
+    return `${protocol}: провайдер отклонил вход. Проверьте пароль приложения и разрешение доступа почтовым программам.`;
+  if (
+    [
+      "ETIMEDOUT",
+      "ETIMEOUT",
+      "ECONNECTION",
+      "ECONNREFUSED",
+      "ENOTFOUND",
+      "EAI_AGAIN",
+    ].includes(error.code)
+  )
+    return `${protocol}: не удалось связаться с сервером. Проверьте адрес, порт и доступность сервера.`;
+  return `${protocol}: проверка подключения не пройдена. Проверьте сервер, порт и настройки доступа у провайдера.`;
+}
+async function verifyMailbox(store, gateway, id) {
+  const snapshot = store.mailbox(id, true);
+  try {
+    const cursor = await gateway.verify(snapshot);
+    store.assertMailboxConnection(snapshot);
+    store.markMailbox(id, true, "", snapshot.connectionRevision);
+    if (!snapshot.cursor.validity && !snapshot.cursor.since && cursor)
+      store.synced(id, cursor, Date.now(), snapshot.connectionRevision);
+    return store.mailbox(id);
+  } catch (error) {
+    const message = verificationError(error);
+    store.markMailbox(id, false, message, snapshot.connectionRevision);
+    throw Object.assign(new Error(message), {
+      status: error.status,
+      code: error.code,
+    });
+  }
+}
 export function createApp({
   store,
   password,
@@ -266,8 +309,17 @@ export function createApp({
         return;
       if (path === "/api/mailboxes" && method === "GET")
         return send(store.mailboxOverview());
-      if (path === "/api/mailboxes" && method === "POST")
-        return send(store.saveMailbox(data), 201);
+      if (path === "/api/mailboxes" && method === "POST") {
+        const saved = store.saveMailbox(data);
+        if (data.verify === true) {
+          try {
+            await verifyMailbox(store, gateway, saved.id);
+          } catch {
+            /* Connection stays saved for correction/retry. */
+          }
+        }
+        return send(store.mailbox(saved.id), 201);
+      }
       const disconnect = path.match(/^\/api\/mailboxes\/([^/]+)\/disconnect$/);
       if (disconnect && method === "POST") {
         const mailbox = store.disconnectMailbox(disconnect[1]);
@@ -344,23 +396,7 @@ export function createApp({
           return send(store.saveSignature(mailbox[1], data));
         if (mailbox[2] === "warmup")
           return send(store.warmup(mailbox[1], data));
-        const snapshot = store.mailbox(mailbox[1], true);
-        try {
-          const cursor = await gateway.verify(snapshot);
-          store.markMailbox(mailbox[1], true, "", snapshot.connectionRevision);
-          const m = store.mailbox(mailbox[1], true);
-          if (!m.cursor.validity && !m.cursor.since)
-            store.synced(m.id, cursor, Date.now(), snapshot.connectionRevision);
-          return send(store.mailbox(mailbox[1]));
-        } catch {
-          store.markMailbox(
-            mailbox[1],
-            false,
-            "Проверка SMTP/IMAP не пройдена. Проверьте host, порт и пароль приложения.",
-            snapshot.connectionRevision,
-          );
-          return send({ error: "Проверка SMTP/IMAP не пройдена" }, 400);
-        }
+        return send(await verifyMailbox(store, gateway, mailbox[1]));
       }
       if (path === "/api/import/preview" && method === "POST") {
         if (typeof data.csv === "string") return send(parseContacts(data.csv));

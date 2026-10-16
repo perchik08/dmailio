@@ -27,7 +27,16 @@ const app = createApp({
   store,
   password: "fixture-password-only",
   publicURL: "http://127.0.0.1:19100",
-  gateway: {},
+  gateway: {
+    verify: async (m) => {
+      if (m.imap.password === "reject-fixture-only")
+        throw Object.assign(new Error("fixture-only-provider-message"), {
+          protocol: "IMAP",
+          authenticationFailed: true,
+        });
+      return { since: Date.now(), folders: {} };
+    },
+  },
   worker: {},
   marketing,
 });

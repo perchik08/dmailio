@@ -67,7 +67,7 @@ test("disconnect requires confirmation, persists after reload and reconnects the
   expect(boxes.filter((m) => m.email === address)).toHaveLength(1);
   expect(boxes.find((m) => m.id === box.id)).toMatchObject({
     detached: false,
-    verified: false,
+    verified: true,
   });
   // Leave the disposable fixture detached; no provider connections were opened.
   page.once("dialog", (d) => d.accept());

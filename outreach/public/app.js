@@ -1131,8 +1131,10 @@ async function renderMailboxDNS(m) {
           ? record.values.join("\n")
           : record?.status === "unavailable"
             ? record.error || "Проверка временно недоступна"
-            : "Запись не найдена";
-      return `<article class="dns-card"><div class="section-head"><h2>${name}</h2><span class="dns-status ${ok ? "ok" : record?.status || "missing"}">${ok ? "Всё хорошо" : record?.status === "unavailable" ? "Не удалось проверить" : "Нужно настроить"}</span></div><p class="hint">${help}</p><pre>${escape(text)}</pre>${name === "DKIM" && record?.selector ? `<small>Селектор: ${escape(record.selector)}</small>` : ""}</article>`;
+            : name === "DKIM"
+              ? "DKIM не найден по проверенным селекторам. Это не доказывает отсутствие записи: укажите селектор в настройках ящика."
+              : "Запись не найдена";
+      return `<article class="dns-card"><div class="section-head"><h2>${name}</h2><span class="dns-status ${ok ? "ok" : record?.status || "missing"}">${ok ? "Всё хорошо" : record?.status === "unavailable" ? "Не удалось проверить" : name === "DKIM" && record?.status === "missing" ? "Селектор не найден" : "Нужно настроить"}</span></div><p class="hint">${help}</p><pre>${escape(text)}</pre>${name === "DKIM" && record?.selector ? `<small>Селектор: ${escape(record.selector)}</small>` : ""}</article>`;
     })
     .join("")}</div>`;
 }
@@ -1358,6 +1360,7 @@ function mailboxDialog(
     const f = new FormData(e.target);
     const input = {
       id: m.id,
+      verify: true,
       email: f.get("email"),
       name: f.get("name"),
       surname: f.get("surname"),
@@ -1371,10 +1374,23 @@ function mailboxDialog(
         password: f.get(t + "Password"),
         secure: f.has(t + "Secure"),
       };
-    await api("/mailboxes", input);
-    document.querySelector("dialog").remove();
-    await refresh();
-    notice("Сохранено. Нажмите «Проверить» перед отправкой.");
+    const connectionDialog = e.target.closest("dialog");
+    const button = e.target.querySelector("button.primary");
+    button.disabled = true;
+    button.textContent = "Проверяем SMTP / IMAP…";
+    try {
+      const result = await api("/mailboxes", input);
+      connectionDialog.remove();
+      await refresh();
+      notice(
+        result.verified
+          ? "Почта подключена: SMTP и IMAP проверены. Можно включить прогрев."
+          : `Настройки сохранены, но подключение не проверено. ${result.error || "Нажмите «Проверить» для повтора."}`,
+      );
+    } finally {
+      button.disabled = false;
+      button.textContent = "Сохранить подключение";
+    }
   });
 }
 async function inbox() {
