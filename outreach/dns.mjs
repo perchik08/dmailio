@@ -75,7 +75,7 @@ export async function checkDomainDNS(address, options = {}) {
     ...new Set(
       (options.selectors?.length
         ? options.selectors
-        : ["default", "google", "selector1", "selector2"]
+        : ["mail", "default", "google", "selector1", "selector2"]
       ).filter((value) => /^[a-z0-9_-]{1,63}$/i.test(value)),
     ),
   ];

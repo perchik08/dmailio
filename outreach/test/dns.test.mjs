@@ -96,3 +96,21 @@ test("a timed out DNS record does not hide completed record checks", async () =>
   assert.equal(result.dkim.status, "ok");
   assert.equal(result.dmarc.status, "unavailable");
 });
+
+test("default DKIM discovery finds Yandex mail selector for every mailbox on the domain", async () => {
+  const resolver = {
+    resolveMx: async () => [{ priority: 10, exchange: "mx.yandex.net" }],
+    resolveTxt: async (name) =>
+      name === "mail._domainkey.winsolutions.ru"
+        ? [["v=DKIM1; k=rsa; p=public-key"]]
+        : [],
+  };
+  for (const address of [
+    "d.demidov@winsolutions.ru",
+    "g.safin@winsolutions.ru",
+  ]) {
+    const result = await checkDomainDNS(address, { resolver });
+    assert.equal(result.dkim.status, "ok");
+    assert.equal(result.dkim.selector, "mail");
+  }
+});
