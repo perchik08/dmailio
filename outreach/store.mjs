@@ -602,6 +602,13 @@ export class Store {
         input.steps.length <= 20,
       "Цепочка: 1–20 писем",
     );
+    const normalizeStep = (s, i) => ({
+      subject: s.subject,
+      body: s.body,
+      delay: i ? s.delay : 0,
+      format: contentFormat(s.format),
+      includeSignature: s.includeSignature !== false,
+    });
     const steps = input.steps.map((s, i) => {
       requireValue(
         typeof s.body === "string" && s.body.length <= 100000,
@@ -617,13 +624,7 @@ export class Store {
         Number.isInteger(s.delay) && s.delay >= 0 && s.delay <= 365,
         "Задержка: 0–365 дней",
       );
-      return {
-        subject: s.subject,
-        body: s.body,
-        delay: i ? s.delay : 0,
-        format: contentFormat(s.format),
-        includeSignature: s.includeSignature !== false,
-      };
+      return normalizeStep(s, i);
     });
     requireValue(Array.isArray(input.mailboxIds), "Выберите ящики");
     const mailboxIds = [...new Set(input.mailboxIds)];
@@ -644,7 +645,7 @@ export class Store {
     );
     if (previous && previous.status !== "draft") {
       requireValue(
-        json(steps) === json(previous.steps),
+        json(steps) === json(previous.steps.map(normalizeStep)),
         "После запуска можно менять настройки, но не структуру цепочки",
       );
       requireValue(mailboxIds.length > 0, "Выберите хотя бы один ящик");

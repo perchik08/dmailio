@@ -218,6 +218,29 @@ test("live interval, daily cap and schedule updates govern the next reservation"
   }
 });
 
+test("live settings accept legacy sequence defaults without rewriting progress", () => {
+  const { s, c } = setup();
+  try {
+    const cfg = s.campaign(c.id);
+    cfg.steps.forEach((step) => {
+      delete step.format;
+      delete step.includeSignature;
+    });
+    s.db
+      .prepare("UPDATE campaigns SET config=? WHERE id=?")
+      .run(JSON.stringify(cfg), c.id);
+    const saved = s.saveCampaign({
+      ...s.campaign(c.id),
+      name: "Legacy settings",
+    });
+    assert.equal(saved.status, "active");
+    assert.equal(saved.name, "Legacy settings");
+    assert.deepEqual(saved.leads, cfg.leads);
+  } finally {
+    s.close();
+  }
+});
+
 test("rotation preview and reserved rich-signature emails share one selected body", () => {
   const { s, m, c } = setup();
   try {
