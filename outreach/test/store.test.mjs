@@ -111,6 +111,136 @@ function setup() {
   return { s, m, c };
 }
 
+test("live settings preserve progress and apply a replacement sender and interval", () => {
+  const { s, m, c } = setup();
+  const now = Date.parse("2026-09-21T12:00:00Z");
+  try {
+    const first = s.reserve(now, new Set([m.id]));
+    s.finish(first.id, "sent", now);
+    const next = s.saveMailbox({
+      ...mailbox,
+      email: "new@example.com",
+      limit: 50,
+    });
+    s.markMailbox(next.id, true);
+    const before = s.campaign(c.id);
+    const updated = s.saveCampaign({
+      ...before,
+      name: "Updated",
+      mailboxIds: [next.id],
+      schedule: { ...before.schedule, interval: 10 },
+      trackOpens: true,
+      trackClicks: true,
+    });
+    assert.equal(updated.status, "active");
+    assert.deepEqual(updated.leads, before.leads);
+    assert.equal(updated.name, "Updated");
+    assert.equal(updated.trackClicks, true);
+    const due = updated.leads[0].due;
+    const followup = s.reserve(due, new Set([m.id, next.id]));
+    assert.equal(followup.mailbox_id, next.id);
+    assert.equal(followup.step, 1);
+    assert.equal(s.message(first.id).mailbox_id, m.id);
+    s.finish(followup.id, "sent", due);
+    assert.equal(s.campaign(c.id).status, "completed");
+  } finally {
+    s.close();
+  }
+});
+
+test("live settings validate atomically and retain paused status and pinned selected senders", () => {
+  const { s, m, c } = setup();
+  try {
+    const before = s.campaign(c.id);
+    assert.throws(
+      () => s.saveCampaign({ ...before, name: "Bad", mailboxIds: [] }),
+      /ящик/,
+    );
+    assert.equal(s.campaign(c.id).name, before.name);
+    s.setCampaignStatus(c.id, "paused");
+    const updated = s.saveCampaign({
+      ...s.campaign(c.id),
+      name: "Paused edit",
+      dailyLimit: 12,
+    });
+    assert.equal(updated.status, "paused");
+    assert.equal(updated.dailyLimit, 12);
+    assert.deepEqual(updated.mailboxIds, [m.id]);
+  } finally {
+    s.close();
+  }
+});
+
+test("live interval, daily cap and schedule updates govern the next reservation", () => {
+  const { s, m, c } = setup();
+  const now = Date.parse("2026-09-21T12:00:00Z");
+  try {
+    s.db
+      .prepare("INSERT INTO leads(id,campaign_id,email,fields) VALUES(?,?,?,?)")
+      .run(
+        "second-live",
+        c.id,
+        "second@example.com",
+        JSON.stringify({ name: "Second" }),
+      );
+    const first = s.reserve(now, new Set([m.id]));
+    s.finish(first.id, "sent", now);
+    let cfg = s.campaign(c.id);
+    s.saveCampaign({ ...cfg, dailyLimit: 1 });
+    assert.equal(s.reserve(now + 120000, new Set([m.id])), null);
+    s.saveCampaign({
+      ...cfg,
+      dailyLimit: 3,
+      schedule: { ...cfg.schedule, interval: 10 },
+    });
+    assert.equal(s.reserve(now + 120000, new Set([m.id])), null);
+    s.saveCampaign({
+      ...cfg,
+      dailyLimit: 3,
+      schedule: {
+        ...cfg.schedule,
+        interval: 1,
+        start: "18:00",
+        end: "19:00",
+        timezone: "UTC",
+      },
+    });
+    assert.equal(s.reserve(now + 120000, new Set([m.id])), null);
+    s.saveCampaign({ ...cfg, dailyLimit: 3 });
+    const second = s.reserve(now + 120000, new Set([m.id]));
+    assert.ok(second);
+    assert.notEqual(second.lead_id, first.lead_id);
+    assert.equal(second.mailbox_id, m.id);
+    assert.throws(() => s.saveCampaign({ ...cfg, dailyLimit: -1 }), /Лимит/);
+    assert.throws(() => s.saveCampaign({ ...cfg, steps: [] }), /Цепочка/);
+  } finally {
+    s.close();
+  }
+});
+
+test("live settings accept legacy sequence defaults without rewriting progress", () => {
+  const { s, c } = setup();
+  try {
+    const cfg = s.campaign(c.id);
+    cfg.steps.forEach((step) => {
+      delete step.format;
+      delete step.includeSignature;
+    });
+    s.db
+      .prepare("UPDATE campaigns SET config=? WHERE id=?")
+      .run(JSON.stringify(cfg), c.id);
+    const saved = s.saveCampaign({
+      ...s.campaign(c.id),
+      name: "Legacy settings",
+    });
+    assert.equal(saved.status, "active");
+    assert.equal(saved.name, "Legacy settings");
+    assert.deepEqual(saved.leads, cfg.leads);
+  } finally {
+    s.close();
+  }
+});
+
 test("rotation preview and reserved rich-signature emails share one selected body", () => {
   const { s, m, c } = setup();
   try {

@@ -589,11 +589,7 @@ export class Store {
   }
   saveCampaign(input) {
     const id = input.id || randomUUID();
-    if (input.id)
-      requireValue(
-        this.campaign(id).status === "draft",
-        "Редактировать можно только черновик",
-      );
+    const previous = input.id ? this.campaign(id) : null;
     requireValue(
       typeof input.name === "string" &&
         input.name.trim() &&
@@ -606,6 +602,13 @@ export class Store {
         input.steps.length <= 20,
       "Цепочка: 1–20 писем",
     );
+    const normalizeStep = (s, i) => ({
+      subject: s.subject,
+      body: s.body,
+      delay: i ? s.delay : 0,
+      format: contentFormat(s.format),
+      includeSignature: s.includeSignature !== false,
+    });
     const steps = input.steps.map((s, i) => {
       requireValue(
         typeof s.body === "string" && s.body.length <= 100000,
@@ -621,13 +624,7 @@ export class Store {
         Number.isInteger(s.delay) && s.delay >= 0 && s.delay <= 365,
         "Задержка: 0–365 дней",
       );
-      return {
-        subject: s.subject,
-        body: s.body,
-        delay: i ? s.delay : 0,
-        format: contentFormat(s.format),
-        includeSignature: s.includeSignature !== false,
-      };
+      return normalizeStep(s, i);
     });
     requireValue(Array.isArray(input.mailboxIds), "Выберите ящики");
     const mailboxIds = [...new Set(input.mailboxIds)];
@@ -638,7 +635,35 @@ export class Store {
       schedule: validateSchedule(input.schedule || defaultSchedule),
       trackOpens: !!input.trackOpens,
       trackClicks: !!input.trackClicks,
+      dailyLimit: input.dailyLimit ?? previous?.dailyLimit ?? 0,
     };
+    requireValue(
+      Number.isInteger(cfg.dailyLimit) &&
+        cfg.dailyLimit >= 0 &&
+        cfg.dailyLimit <= 1000000,
+      "Лимит кампании: целое число от 0 до 1000000",
+    );
+    if (previous && previous.status !== "draft") {
+      requireValue(
+        json(steps) === json(previous.steps.map(normalizeStep)),
+        "После запуска можно менять настройки, но не структуру цепочки",
+      );
+      requireValue(mailboxIds.length > 0, "Выберите хотя бы один ящик");
+      for (const mid of mailboxIds) {
+        const mailbox = this.mailbox(mid);
+        requireValue(
+          mailbox.enabled && mailbox.verified,
+          "Проверьте подключение выбранных ящиков",
+        );
+        // Validate remaining personalizations before committing any setting.
+        if (!previous.mailboxIds.includes(mid))
+          for (const lead of previous.leads.filter(
+            (l) => l.status === "pending",
+          ))
+            for (let step = lead.step; step < steps.length; step++)
+              this.compose({ ...previous, ...cfg }, lead, mailbox, step, true);
+      }
+    }
     this.db
       .prepare(
         "INSERT INTO campaigns(id,name,config,created) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,config=excluded.config",
@@ -782,10 +807,7 @@ export class Store {
       typeof name === "string" && name.trim() && name.length <= 150,
       "Введите название кампании",
     );
-    requireValue(
-      this.campaign(id).status === "draft",
-      "Редактировать можно только черновик",
-    );
+    this.campaign(id);
     this.db
       .prepare("UPDATE campaigns SET name=? WHERE id=?")
       .run(name.trim(), id);
@@ -971,11 +993,22 @@ export class Store {
             .get(l.campaign_id);
           const c = { ...r, ...JSON.parse(r.config) };
           c.inWindow = inWindow(new Date(now), c.schedule);
+          c.withinDailyLimit =
+            !c.dailyLimit ||
+            this.db
+              .prepare(
+                "SELECT count(*) n FROM messages WHERE campaign_id=? AND direction='out' AND kind='campaign' AND status IN ('sent','sending','unknown') AND created>?",
+              )
+              .get(c.id, now - 86400000).n < c.dailyLimit;
           campaigns.set(r.id, c);
         }
         const c = campaigns.get(l.campaign_id);
-        if (!c.inWindow) continue;
-        const mids = l.mailbox_id ? [l.mailbox_id] : c.mailboxIds;
+        if (!c.inWindow || !c.withinDailyLimit) continue;
+        // Keep a contact's sender while selected; removing it switches future messages.
+        const mids =
+          l.mailbox_id && c.mailboxIds.includes(l.mailbox_id)
+            ? [l.mailbox_id]
+            : c.mailboxIds;
         const mid = mids
           .filter(
             (id) =>
@@ -1497,7 +1530,8 @@ export class Store {
     const m = this.db
       .prepare("SELECT * FROM messages WHERE token=? AND kind='campaign'")
       .get(token);
-    if (m && this.campaign(m.campaign_id).trackOpens)
+    // A pixel already sent remains valid after tracking is disabled for future mail.
+    if (m)
       this.db
         .prepare("INSERT OR IGNORE INTO events VALUES(?,?,'open',?)")
         .run(randomUUID(), m.id, now);

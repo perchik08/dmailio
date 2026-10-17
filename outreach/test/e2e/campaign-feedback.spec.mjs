@@ -35,6 +35,42 @@ async function fixture(page) {
   await page.locator(`[data-campaign="${campaign.id}"]`).click();
   return campaign;
 }
+
+test("active campaign settings save without pausing or losing a draft on statistics refresh", async ({
+  page,
+}) => {
+  const c = await fixture(page);
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Запустить", exact: true }).click();
+  await expect(page.locator("#notice")).toContainText("Кампания запущена");
+  await page.getByRole("button", { name: "3. Настройки", exact: true }).click();
+  await expect(page.locator("#campaign-name")).toBeEnabled();
+  await page.locator("#campaign-name").fill("Updated active campaign");
+  await page.locator("#interval").fill("15");
+  await page.locator("#daily-limit").fill("25");
+  await page.locator("#timezone").fill("UTC");
+  await page.locator("#track").check();
+  await page.locator("#track-clicks").check();
+  await page
+    .getByRole("button", { name: "Обновить статистику", exact: true })
+    .click();
+  await expect(page.locator("#campaign-name")).toHaveValue(
+    "Updated active campaign",
+  );
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(page.locator("#notice")).toContainText("Кампания сохранена");
+  const saved = await (await page.request.get(`/api/campaigns/${c.id}`)).json();
+  expect(saved.status).toBe("active");
+  expect(saved.name).toBe("Updated active campaign");
+  expect(saved.schedule.interval).toBe(15);
+  expect(saved.schedule.timezone).toBe("UTC");
+  expect(saved.dailyLimit).toBe(25);
+  expect(saved.trackOpens && saved.trackClicks).toBe(true);
+  await page.reload();
+  await page.locator(`[data-campaign="${c.id}"]`).click();
+  await page.getByRole("button", { name: "3. Настройки", exact: true }).click();
+  await expect(page.locator("#interval")).toHaveValue("15");
+});
 test("launch, pause and resume display confirmed notifications and retain the newest timer", async ({
   page,
 }) => {
