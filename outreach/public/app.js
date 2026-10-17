@@ -481,16 +481,26 @@ function readEditor() {
         Number(e.value),
       ),
     };
+    current.dailyLimit = Number(document.querySelector("#daily-limit").value);
     current.trackOpens = document.querySelector("#track").checked;
     current.trackClicks = document.querySelector("#track-clicks").checked;
   }
 }
 async function saveCampaign() {
+  if (campaignActionsPending.has(current.id)) return;
   readEditor();
-  current = await api("/campaigns", current);
-  state = await api("/state");
-  notice("Кампания сохранена", "success");
+  const target = current;
+  campaignActionsPending.add(target.id);
   renderCampaign();
+  try {
+    const saved = await api("/campaigns", target);
+    if (current?.id === target.id) current = saved;
+    state = await api("/state");
+    notice("Кампания сохранена", "success");
+  } finally {
+    campaignActionsPending.delete(target.id);
+    if (current?.id === target.id && page === "campaigns") renderCampaign();
+  }
 }
 function bindCampaignTitle() {
   const button = document.querySelector("#campaign-title");
@@ -763,8 +773,9 @@ function wireImportWizard() {
 function renderCampaign() {
   const busy = campaignActionsPending.has(current.id);
   const editable = current.status === "draft" && !busy;
+  const settingsEditable = !busy;
   shell(
-    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${editable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${campaignBadge(current.status)}</div><div class="row">${editable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" || busy ? "disabled" : ""} aria-busy="${busy}">${busy ? (current.status === "active" ? "Приостанавливаем…" : current.status === "paused" ? "Возобновляем…" : "Запускаем…") : current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div>${progressSummary()}<div class="tabs">${[
+    `<div class="top"><div class="row"><button id="back">← Кампании</button><h1>${settingsEditable ? `<button id="campaign-title" type="button" class="campaign-title" aria-label="Изменить название кампании">${escape(current.name)}</button>` : escape(current.name)}</h1>${campaignBadge(current.status)}</div><div class="row">${settingsEditable ? '<button id="save" class="primary">Сохранить</button>' : ""}${current.id ? `<button id="toggle" ${current.status === "completed" || busy ? "disabled" : ""} aria-busy="${busy}">${busy ? (current.status === "active" ? "Приостанавливаем…" : current.status === "paused" ? "Возобновляем…" : "Запускаем…") : current.status === "active" ? "Пауза" : "Запустить"}</button>` : ""}</div></div>${progressSummary()}<div class="tabs">${[
       ["leads", "1. Лиды"],
       ["sequence", "2. Цепочка"],
       ["settings", "3. Настройки"],
@@ -869,7 +880,7 @@ function renderCampaign() {
         "Подпись Отправителя",
       ]),
     ];
-    box.innerHTML = `<div class="steps"><aside>${renderSequenceSidebar(current.steps, stepIndex, editable, escape)}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Ротация фраз: {Привет|Здравствуйте} — для каждого письма выбирается один вариант. Варианты могут содержать {{Имя}}; вложенные группы не поддерживаются. Предпросмотр показывает пример, при отправке выбор делается заново и сохраняется. Отправитель закрепляется за контактом на всю цепочку.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
+    box.innerHTML = `<div class="steps"><aside>${renderSequenceSidebar(current.steps, stepIndex, editable, escape)}${editable ? '<button id="add-step">+ Добавить письмо</button>' : ""}</aside><div class="panel editor"><fieldset ${editable ? "" : "disabled"}><label>Тема<input id="subject" value="${escape(s.subject)}" placeholder="${stepIndex ? "Пустая — тема предыдущего письма" : "{{Тема цепочки}}"}"></label><label for="body">Текст письма</label><textarea id="body" placeholder="Введите текст или {{Письмо 1}}">${escape(s.body)}</textarea><p class="hint">Переменные подставляются из строки получателя. Ротация фраз: {Привет|Здравствуйте} — для каждого письма выбирается один вариант. Варианты могут содержать {{Имя}}; вложенные группы не поддерживаются. Предпросмотр показывает пример, при отправке выбор делается заново и сохраняется. Отправитель закрепляется за контактом, пока выбран в настройках. Если убрать его из кампании, следующие письма пойдут с выбранных ящиков.</p><div class="variables">${variables.map((v) => `<button type="button" data-variable="${escape(v)}">${escape(v)}</button>`).join("")}</div></fieldset><div class="actions">${editable && current.steps.length > 1 ? '<button id="remove-step" class="danger">Удалить шаг</button>' : ""}<button id="preview" ${current.id ? "" : "disabled"}>Предпросмотр сохранённой версии</button></div></div></div>`;
     const bodyEditor = mountEditor(document.querySelector("#body"), {
       api,
       notify: notice,
@@ -925,7 +936,7 @@ function renderCampaign() {
   }
   if (activeTab === "settings") {
     const s = current.schedule;
-    box.innerHTML = `<fieldset ${editable ? "" : "disabled"}><div class="panel"><label>Название<input id="campaign-name" value="${escape(current.name)}"></label><h2>Отправители</h2>${state.mailboxes.length ? state.mailboxes.map((m) => `<label class="check"><input name="sender" type="checkbox" value="${m.id}" ${current.mailboxIds.includes(m.id) ? "checked" : ""}>${escape(m.email)} · ${m.verified ? "подключён" : "не проверен"}</label>`).join("") : '<p class="hint">Сначала добавьте почту в разделе «Почты».</p>'}</div><div class="panel"><h2>Расписание</h2><div class="row">${["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"].map((d, i) => `<label class="check"><input type="checkbox" name="weekday" value="${i}" ${s.days.includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div><div class="grid"><label>Начиная с<input id="schedule-start" type="time" value="${s.start}"></label><label>Заканчивая в<input id="schedule-end" type="time" value="${s.end}"></label><label>Часовой пояс<input id="timezone" value="${escape(s.timezone)}"></label><label>Минимум минут между отправками с ящика<input id="interval" type="number" min="1" value="${s.interval}"></label></div><label class="check"><input id="track" type="checkbox" ${current.trackOpens ? "checked" : ""}>Отслеживать открытия</label><label class="check"><input id="track-clicks" type="checkbox" ${current.trackClicks ? "checked" : ""}>Отслеживать переходы по ссылкам</label><p class="hint">Открытие — сигнал загрузки пикселя, а не гарантия прочтения. Лимит ящика общий для всех кампаний, ручных ответов и прогрева, за последние 24 часа.</p></div></fieldset>`;
+    box.innerHTML = `<fieldset ${settingsEditable ? "" : "disabled"}><div class="panel"><p class="hint">Изменения после сохранения применяются к следующим отправкам. Кампания продолжает работать. Уже отправленные письма не меняются.</p><label>Название<input id="campaign-name" value="${escape(current.name)}"></label><h2>Отправители</h2>${state.mailboxes.length ? state.mailboxes.map((m) => `<label class="check"><input name="sender" type="checkbox" value="${m.id}" ${current.mailboxIds.includes(m.id) ? "checked" : ""}>${escape(m.email)} · ${m.verified ? "подключён" : "не проверен"}</label>`).join("") : '<p class="hint">Сначала добавьте почту в разделе «Почты».</p>'}</div><div class="panel"><h2>Расписание</h2><div class="row">${["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"].map((d, i) => `<label class="check"><input type="checkbox" name="weekday" value="${i}" ${s.days.includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div><div class="grid"><label>Начиная с<input id="schedule-start" type="time" value="${s.start}"></label><label>Заканчивая в<input id="schedule-end" type="time" value="${s.end}"></label><label>Часовой пояс<input id="timezone" value="${escape(s.timezone)}"></label><label>Лимит писем кампании за 24 часа (0 — без дополнительного лимита)<input id="daily-limit" type="number" min="0" max="1000000" value="${current.dailyLimit ?? 0}"></label><label>Минимум минут между отправками с ящика<input id="interval" type="number" min="1" value="${s.interval}"></label></div><label class="check"><input id="track" type="checkbox" ${current.trackOpens ? "checked" : ""}>Отслеживать открытия</label><label class="check"><input id="track-clicks" type="checkbox" ${current.trackClicks ? "checked" : ""}>Отслеживать переходы по ссылкам</label><p class="hint">Открытие — сигнал загрузки пикселя, а не гарантия прочтения. Лимит ящика общий для всех кампаний, ручных ответов и прогрева, за последние 24 часа.</p></div></fieldset>`;
   }
   if (activeTab === "results") {
     box.innerHTML = current.id
