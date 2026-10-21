@@ -972,7 +972,14 @@ export class Store {
     return this.transaction(() => {
       const rows = this.db
         .prepare(
-          "SELECT l.* FROM leads l JOIN campaigns c ON c.id=l.campaign_id WHERE c.status='active' AND l.status='pending' AND l.due<=? ORDER BY l.due,l.rowid",
+          `SELECT l.* FROM leads l
+           JOIN campaigns c ON c.id=l.campaign_id
+           LEFT JOIN (
+             SELECT campaign_id,max(created) last_reserved FROM messages
+             WHERE kind='campaign' AND direction='out' GROUP BY campaign_id
+           ) turns ON turns.campaign_id=c.id
+           WHERE c.status='active' AND l.status='pending' AND l.due<=?
+           ORDER BY coalesce(turns.last_reserved,0),l.due,l.rowid`,
         )
         .all(now);
       const campaigns = new Map();
@@ -1000,6 +1007,16 @@ export class Store {
                 "SELECT count(*) n FROM messages WHERE campaign_id=? AND direction='out' AND kind='campaign' AND status IN ('sent','sending','unknown') AND created>?",
               )
               .get(c.id, now - 86400000).n < c.dailyLimit;
+          // Campaign spacing belongs to this campaign/sender pair. Other
+          // campaigns and manual mail only consume the shared dispatch budget.
+          c.lastByMailbox = new Map(
+            this.db
+              .prepare(
+                "SELECT mailbox_id,max(created) last_reserved FROM messages WHERE campaign_id=? AND kind='campaign' AND direction='out' AND status IN ('sent','sending','unknown') GROUP BY mailbox_id",
+              )
+              .all(c.id)
+              .map((row) => [row.mailbox_id, row.last_reserved]),
+          );
           campaigns.set(r.id, c);
         }
         const c = campaigns.get(l.campaign_id);
@@ -1012,7 +1029,10 @@ export class Store {
         const mid = mids
           .filter(
             (id) =>
-              healthy.has(id) && this.available(id, now, c.schedule.interval),
+              healthy.has(id) &&
+              this.available(id, now) &&
+              (!c.lastByMailbox.has(id) ||
+                now - c.lastByMailbox.get(id) >= c.schedule.interval * 60000),
           )
           .sort((a, b) => this.load(a, now) - this.load(b, now))[0];
         if (!mid) continue;
