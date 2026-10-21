@@ -2,7 +2,6 @@ import nodemailer from "nodemailer";
 import { sendCampaign, copyCampaignSent } from "./campaign-delivery.mjs";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
-import { escapeHTML } from "./core.mjs";
 import { renderContent } from "./content.mjs";
 import {
   initializeFullInbox,
@@ -175,14 +174,8 @@ export class MailGateway {
         ? (url) => this.store.trackedLink(message, url, this.publicURL)
         : undefined,
     );
-    const text =
-      formatted.text +
-      (message.kind === "campaign" ? `\n\nОтписаться: ${unsubscribe}` : "");
-    let html =
-      formatted.html +
-      (message.kind === "campaign"
-        ? `<p><a href="${escapeHTML(unsubscribe)}">Отписаться</a></p>`
-        : "");
+    const text = formatted.text;
+    let html = formatted.html;
     if (
       message.kind === "campaign" &&
       this.store.campaign(message.campaign_id).trackOpens
