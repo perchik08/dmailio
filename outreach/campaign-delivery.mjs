@@ -1,5 +1,9 @@
 import nodemailer from "nodemailer";
+import { setTimeout as delay } from "node:timers/promises";
 import { requireValue } from "./core.mjs";
+const temporaryAuthenticationFailure = (error) =>
+  error.responseStatus === "NO" &&
+  /\bAUTHENTICATE internal server error\b/i.test(error.responseText || "");
 const text = (value) =>
   String(value || "")
     .replace(/[\u0000-\u0008\u000b-\u001f]/g, " ")
@@ -135,10 +139,25 @@ export async function copyCampaignSent(gateway, mailbox, message, options) {
   delivery.attemptCopy(message.id);
   let c,
     folder = "",
-    warning = "";
+    warning = "",
+    phase = "connect";
   try {
-    c = gateway.imap(mailbox);
-    await c.connect();
+    // Yandex sometimes rejects valid IMAP authentication with an internal
+    // server error. Retry only connection setup, never SMTP or a blind APPEND.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      c = gateway.imap(mailbox);
+      try {
+        await c.connect();
+        break;
+      } catch (error) {
+        if (!temporaryAuthenticationFailure(error) || attempt === 2)
+          throw error;
+        c.close();
+        c = null;
+        await delay(250 * (attempt + 1));
+      }
+    }
+    phase = "list";
     const folders = await c.list();
     const sent =
       folders.find((f) => f.specialUse === "\\Sent") ||
@@ -149,11 +168,13 @@ export async function copyCampaignSent(gateway, mailbox, message, options) {
       );
     if (!sent) throw Error("Не найдена папка «Отправленные»");
     folder = sent.path || sent.name;
+    phase = "open";
     const lock = await c.getMailboxLock(folder, { readOnly: true });
     let found = false;
     try {
       // Some providers reject HEADER Message-ID searches. Search by date then
       // compare actual envelope IDs; a failed search never permits blind APPEND.
+      phase = "search";
       const ids = await c.search(
         {
           since: new Date(
@@ -165,6 +186,7 @@ export async function copyCampaignSent(gateway, mailbox, message, options) {
       if (!Array.isArray(ids))
         throw Error("Не удалось проверить существующую копию письма");
       for (let offset = 0; offset < ids.length && !found; offset += 200) {
+        phase = "fetch";
         for await (const row of c.fetch(
           ids.slice(offset, offset + 200).join(","),
           { envelope: true },
@@ -177,6 +199,7 @@ export async function copyCampaignSent(gateway, mailbox, message, options) {
       lock.release();
     }
     if (!found) {
+      phase = "append";
       const appended = await c.append(
         folder,
         receipt.mime,
@@ -186,7 +209,11 @@ export async function copyCampaignSent(gateway, mailbox, message, options) {
       if (!appended) throw Error("Не удалось сохранить копию в «Отправленные»");
     }
   } catch (error) {
-    warning = text(error.message);
+    // Do not store raw commands or server text: they may contain credentials
+    // or private session identifiers. Keep the stage and safe failure category.
+    warning = text(
+      `${phase}: ${error.message}${error.code || error.responseStatus ? ` [${error.code || error.responseStatus}]` : ""}${temporaryAuthenticationFailure(error) ? " — AUTHENTICATE internal server error (временная ошибка сервера IMAP)" : ""}`,
+    );
   } finally {
     try {
       c?.close();

@@ -103,6 +103,81 @@ test("copy failure retains SMTP acceptance and does not become unknown", async (
   assert.equal(s.campaignDelivery.get(m.id).copyStatus, "error");
   assert.match(s.campaignDelivery.get(m.id).copyError, /copy offline/);
 });
+
+test("temporary Yandex authentication server failure reconnects for the Sent copy without resending SMTP", async (t) => {
+  const { s, m, g, calls } = setup(t);
+  const imap = g.imap;
+  let connections = 0;
+  g.imap = () => {
+    const client = imap();
+    client.connect = async () => {
+      if (++connections === 1)
+        throw Object.assign(Error("Command failed"), {
+          responseStatus: "NO",
+          responseText:
+            "AUTHENTICATE internal server error sc=private-server-id",
+        });
+    };
+    return client;
+  };
+  await new Worker(s, g).deliver(m);
+  assert.equal(s.message(m.id).status, "sent");
+  assert.equal(s.campaignDelivery.get(m.id).copyStatus, "copied");
+  assert.equal(connections, 2);
+  assert.equal(calls.smtp, 1);
+  assert.equal(calls.append, 1);
+});
+
+test("persistent temporary IMAP authentication errors stop after bounded retries and preserve SMTP proof", async (t) => {
+  const { s, m, g, calls } = setup(t);
+  const imap = g.imap;
+  let connections = 0;
+  g.imap = () => {
+    const client = imap();
+    client.connect = async () => {
+      connections++;
+      throw Object.assign(Error("Command failed"), {
+        responseStatus: "NO",
+        responseText: "AUTHENTICATE internal server error sc=private-server-id",
+      });
+    };
+    return client;
+  };
+  await new Worker(s, g).deliver(m);
+  const receipt = s.campaignDelivery.get(m.id);
+  assert.equal(connections, 3);
+  assert.equal(receipt.copyStatus, "error");
+  assert.match(
+    receipt.copyError,
+    /connect.*NO.*AUTHENTICATE internal server error/,
+  );
+  assert.doesNotMatch(receipt.copyError, /private-server-id/);
+  assert.ok(receipt.acceptedAt);
+  assert.equal(calls.smtp, 1);
+  assert.equal(calls.append, 0);
+});
+
+test("invalid IMAP credentials are not retried and never cause another SMTP send", async (t) => {
+  const { s, m, g, calls } = setup(t);
+  const imap = g.imap;
+  let connections = 0;
+  g.imap = () => {
+    const client = imap();
+    client.connect = async () => {
+      connections++;
+      throw Object.assign(Error("Command failed"), {
+        responseStatus: "NO",
+        responseText: "AUTHENTICATIONFAILED Invalid credentials",
+      });
+    };
+    return client;
+  };
+  await new Worker(s, g).deliver(m);
+  assert.equal(connections, 1);
+  assert.equal(s.campaignDelivery.get(m.id).copyStatus, "error");
+  assert.equal(calls.smtp, 1);
+  assert.equal(calls.append, 0);
+});
 test("legacy restore copies only, preserves historical date and never invents SMTP proof", async (t) => {
   const { s, box, m, g, calls } = setup(t);
   const sent = Date.now() - 86400000;
@@ -122,6 +197,34 @@ test("provider copy is deduplicated by Message-ID", async (t) => {
   assert.equal(calls.smtp, 1);
   assert.equal(calls.append, 0);
   assert.equal(s.campaignDelivery.get(m.id).copyStatus, "copied");
+});
+
+test("retry after an ambiguous APPEND finds the saved copy without another APPEND or SMTP send", async (t) => {
+  const { s, box, m, g, calls } = setup(t);
+  const imap = g.imap;
+  let saved = false;
+  g.imap = () => {
+    const client = imap();
+    client.search = async () => (saved ? [8] : []);
+    client.fetch = async function* () {
+      yield { uid: 8, envelope: { messageId: m.message_id } };
+    };
+    client.append = async () => {
+      calls.append++;
+      saved = true;
+      throw Object.assign(Error("Response lost after saving"), {
+        code: "ETIMEDOUT",
+      });
+    };
+    return client;
+  };
+  await new Worker(s, g).deliver(m);
+  assert.equal(s.campaignDelivery.get(m.id).copyStatus, "error");
+  assert.match(s.campaignDelivery.get(m.id).copyError, /append.*ETIMEDOUT/);
+  await g.restoreCampaignCopy(s.mailbox(box.id, true), s.message(m.id));
+  assert.equal(s.campaignDelivery.get(m.id).copyStatus, "copied");
+  assert.equal(calls.smtp, 1);
+  assert.equal(calls.append, 1);
 });
 test("failed search never appends an unchecked duplicate or retries SMTP", async (t) => {
   const { s, m, g, calls } = setup(t, { searchError: true });
