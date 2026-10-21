@@ -111,7 +111,8 @@ test("SMTP adapter generates threaded MIME with opt-out headers and escaped cont
   const p = await simpleParser(raw);
   assert.equal(p.messageId, "<step2@example.com>");
   assert.equal(p.inReplyTo, "<step1@example.com>");
-  assert.match(p.text, /Отписаться:/);
+  assert.doesNotMatch(p.text, /Отписаться|\/unsubscribe\//);
+  assert.doesNotMatch(p.html, /Отписаться|\/unsubscribe\//);
   assert.match(p.html, /&lt;script&gt;/);
   assert.match(
     raw.toString(),
